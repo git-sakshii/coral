@@ -1,0 +1,385 @@
+---
+name: onepassword
+version: "0.1.0"
+dsl_version: 3
+backend: http
+description: >-
+  Query 1Password vaults and items through Coral SQL using the
+  1Password Connect Server REST API.
+
+inputs:
+  ONEPASSWORD_CONNECT_URL:
+    kind: variable
+    default: http://localhost:8080/v1
+    hint: >-
+      Base URL for your 1Password Connect Server API. Keep the default
+      for local deployments. For remote servers use
+      https://<your-connect-host>/v1.
+  ONEPASSWORD_CONNECT_TOKEN:
+    kind: secret
+    required: true
+    hint: >-
+      1Password Connect access token. Create one from your 1Password
+      account under Integrations > Directory > 1Password Connect.
+      See https://developer.1password.com/docs/connect
+
+base_url: "{{input.ONEPASSWORD_CONNECT_URL}}"
+
+auth:
+  type: HeaderAuth
+  headers:
+    - name: Authorization
+      from: template
+      template: Bearer {{input.ONEPASSWORD_CONNECT_TOKEN}}
+
+test_queries:
+  - SELECT id, name, item_count FROM onepassword.vaults LIMIT 5
+
+tables:
+  # ------------------------------------------------------------------
+  # onepassword.vaults — list all accessible vaults
+  # GET /v1/vaults
+  # Response: root JSON array of Vault objects.
+  # ------------------------------------------------------------------
+  - name: vaults
+    description: >-
+      All 1Password vaults accessible to the Connect token. Use the
+      `id` column as the `vault_id` filter on the `items` and
+      `item_details` tables.
+    guide: |
+      Entry-point table — no filter required. Returns all vaults
+      visible to the Connect token. `id` (UUID) is the value to pass
+      as `vault_id` when querying `items` or `item_details`. `item_count`
+      is the count of secrets stored in the vault.
+    request:
+      method: GET
+      path: /vaults
+    response:
+      row_strategy: direct
+    pagination:
+      mode: none
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: Vault UUID.
+        expr:
+          kind: path
+          path:
+            - id
+      - name: name
+        type: Utf8
+        nullable: false
+        description: Vault display name.
+        expr:
+          kind: path
+          path:
+            - name
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Optional vault description.
+        expr:
+          kind: path
+          path:
+            - description
+      - name: attribute_version
+        type: Int64
+        nullable: true
+        description: Version of the vault attributes.
+        expr:
+          kind: path
+          path:
+            - attributeVersion
+      - name: content_version
+        type: Int64
+        nullable: true
+        description: Version of the vault content.
+        expr:
+          kind: path
+          path:
+            - contentVersion
+      - name: item_count
+        type: Int64
+        nullable: true
+        description: Number of items stored in this vault.
+        expr:
+          kind: path
+          path:
+            - items
+      - name: type
+        type: Utf8
+        nullable: true
+        description: >-
+          Vault type (e.g. USER_CREATED, PERSONAL, EVERYONE,
+          TRANSFER).
+        expr:
+          kind: path
+          path:
+            - type
+      - name: created_at
+        type: Timestamp
+        nullable: true
+        description: When the vault was created.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - createdAt
+      - name: updated_at
+        type: Timestamp
+        nullable: true
+        description: When the vault was last updated.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - updatedAt
+
+  # ------------------------------------------------------------------
+  # onepassword.items — list item summaries in a vault
+  # GET /v1/vaults/{vaultUuid}/items
+  # Response: root JSON array of Item summary objects.
+  # ------------------------------------------------------------------
+  - name: items
+    description: >-
+      Item summaries in a 1Password vault. Requires `vault_id` (from
+      `onepassword.vaults.id`). Each row is one item with its title,
+      category, tags, and timestamps. Use `id` as the `item_id`
+      filter on the `item_details` table for full secret fields.
+    guide: |
+      Requires `vault_id` — obtain it from `onepassword.vaults`.
+      Each row is one item summary. `category` values include LOGIN,
+      PASSWORD, DATABASE, API_CREDENTIAL, SECURE_NOTE, CREDIT_CARD,
+      IDENTITY, DOCUMENT, SSH_KEY, SERVER, and others. To see the
+      actual secret fields and values, query `onepassword.item_details`
+      with both `vault_id` and `item_id`.
+    filters:
+      - name: vault_id
+        required: true
+    request:
+      method: GET
+      path: /vaults/{{filter.vault_id}}/items
+    response:
+      row_strategy: direct
+    pagination:
+      mode: none
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: Item UUID.
+        expr:
+          kind: path
+          path:
+            - id
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Item title.
+        expr:
+          kind: path
+          path:
+            - title
+      - name: version
+        type: Int64
+        nullable: true
+        description: Current version of the item.
+        expr:
+          kind: path
+          path:
+            - version
+      - name: category
+        type: Utf8
+        nullable: true
+        description: >-
+          Item category (LOGIN, PASSWORD, DATABASE, API_CREDENTIAL,
+          SECURE_NOTE, CREDIT_CARD, IDENTITY, DOCUMENT, SSH_KEY,
+          SERVER, etc.).
+        expr:
+          kind: path
+          path:
+            - category
+      - name: tags
+        type: Json
+        nullable: true
+        description: JSON array of string tags assigned to the item.
+        expr:
+          kind: path
+          path:
+            - tags
+      - name: created_at
+        type: Timestamp
+        nullable: true
+        description: When the item was created.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - createdAt
+      - name: updated_at
+        type: Timestamp
+        nullable: true
+        description: When the item was last modified.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - updatedAt
+      - name: vault_id
+        type: Utf8
+        nullable: false
+        virtual: true
+        description: Vault UUID (echoes the vault_id filter).
+        expr:
+          kind: from_filter
+          key: vault_id
+
+  # ------------------------------------------------------------------
+  # onepassword.item_details — full item with fields and sections
+  # GET /v1/vaults/{vaultUuid}/items/{itemUuid}
+  # Response: single FullItem JSON object.
+  # ------------------------------------------------------------------
+  - name: item_details
+    description: >-
+      Full details of a single 1Password item, including decrypted
+      field values. Requires both `vault_id` and `item_id`. The
+      `fields` column contains the full JSON array of secret fields
+      with labels, values, types, and purposes.
+    guide: |
+      Requires `vault_id` and `item_id` — obtain them from
+      `onepassword.vaults` and `onepassword.items`. Returns exactly
+      one row with the full item including decrypted secret fields.
+      The `fields` column is a JSON array where each element has
+      `id`, `label`, `value`, `type`, and optionally `purpose`
+      (USERNAME, PASSWORD, NOTES). Use JSON accessors to extract
+      specific field values.
+    filters:
+      - name: vault_id
+        required: true
+      - name: item_id
+        required: true
+    request:
+      method: GET
+      path: /vaults/{{filter.vault_id}}/items/{{filter.item_id}}
+    response:
+      row_strategy: direct
+    pagination:
+      mode: none
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: Item UUID.
+        expr:
+          kind: path
+          path:
+            - id
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Item title.
+        expr:
+          kind: path
+          path:
+            - title
+      - name: version
+        type: Int64
+        nullable: true
+        description: Current version of the item.
+        expr:
+          kind: path
+          path:
+            - version
+      - name: category
+        type: Utf8
+        nullable: true
+        description: >-
+          Item category (LOGIN, PASSWORD, DATABASE, API_CREDENTIAL,
+          SECURE_NOTE, CREDIT_CARD, IDENTITY, DOCUMENT, SSH_KEY,
+          SERVER, etc.).
+        expr:
+          kind: path
+          path:
+            - category
+      - name: tags
+        type: Json
+        nullable: true
+        description: JSON array of string tags assigned to the item.
+        expr:
+          kind: path
+          path:
+            - tags
+      - name: fields
+        type: Json
+        nullable: true
+        description: >-
+          JSON array of item fields. Each element has id, label,
+          value, type (STRING, CONCEALED, EMAIL, URL, OTP, etc.),
+          and optionally purpose (USERNAME, PASSWORD, NOTES).
+        expr:
+          kind: path
+          path:
+            - fields
+      - name: sections
+        type: Json
+        nullable: true
+        description: JSON array of sections grouping fields within the item.
+        expr:
+          kind: path
+          path:
+            - sections
+      - name: urls
+        type: Json
+        nullable: true
+        description: JSON array of URL objects associated with this item.
+        expr:
+          kind: path
+          path:
+            - urls
+      - name: created_at
+        type: Timestamp
+        nullable: true
+        description: When the item was created.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - createdAt
+      - name: updated_at
+        type: Timestamp
+        nullable: true
+        description: When the item was last modified.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - updatedAt
+      - name: vault_id
+        type: Utf8
+        nullable: false
+        virtual: true
+        description: Vault UUID (echoes the vault_id filter).
+        expr:
+          kind: from_filter
+          key: vault_id
+      - name: item_id
+        type: Utf8
+        nullable: false
+        virtual: true
+        description: Item UUID (echoes the item_id filter).
+        expr:
+          kind: from_filter
+          key: item_id
