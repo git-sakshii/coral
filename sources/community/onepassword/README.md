@@ -71,7 +71,7 @@ List all vaults accessible to the Connect token.
 | `description` | Utf8 | Optional vault description |
 | `attribute_version` | Int64 | Version of the vault attributes |
 | `content_version` | Int64 | Version of the vault content |
-| `items` | Int64 | Number of items stored in the vault |
+| `item_count` | Int64 | Number of items stored in the vault |
 | `type` | Utf8 | Vault type (e.g. `USER_CREATED`, `PERSONAL`, `EVERYONE`) |
 | `created_at` | Timestamp | Creation time |
 | `updated_at` | Timestamp | Last update time |
@@ -120,9 +120,9 @@ Full details of a single item including decrypted fields. Requires
 
 ```sql
 -- List all vaults and their item counts
-SELECT name, items, type, updated_at
+SELECT name, item_count, type, updated_at
 FROM onepassword.vaults
-ORDER BY items DESC;
+ORDER BY item_count DESC;
 
 -- List all login credentials in a vault
 SELECT id, title, category, updated_at
@@ -144,16 +144,19 @@ WHERE vault_id = '<vault-uuid>'
 GROUP BY category
 ORDER BY item_count DESC;
 
--- Cross-source join: find 1Password items matching GitHub repos
+-- Cross-source join: find 1Password credentials whose titles match GitHub repo names
 SELECT
-  i.title AS credential_name,
+  r.name        AS repo_name,
+  r.full_name   AS repo_full_name,
+  i.title       AS credential_name,
   i.category,
-  i.updated_at AS credential_updated
-FROM onepassword.items i
+  i.updated_at  AS credential_updated
+FROM github.repos r
+JOIN onepassword.items i
+  ON LOWER(i.title) = LOWER(r.name)
 WHERE i.vault_id = '<vault-uuid>'
   AND i.category = 'LOGIN'
-ORDER BY i.updated_at DESC
-LIMIT 20;
+ORDER BY r.name;
 ```
 
 ## Validation
@@ -166,7 +169,7 @@ coral source add --file sources/community/onepassword/manifest.yaml
 coral source test onepassword
 coral sql "SELECT * FROM coral.tables WHERE schema_name = 'onepassword'"
 coral sql "SELECT column_name, data_type FROM coral.columns WHERE schema_name = 'onepassword' AND table_name = 'vaults'"
-coral sql "SELECT id, name, items FROM onepassword.vaults LIMIT 5"
+coral sql "SELECT id, name, item_count FROM onepassword.vaults LIMIT 5"
 ```
 
 ## Limitations
