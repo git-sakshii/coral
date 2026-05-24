@@ -19,9 +19,11 @@ inputs:
     kind: secret
     required: true
     hint: >-
-      1Password Connect access token. Create one from your 1Password
-      account under Integrations > Directory > 1Password Connect.
-      See https://developer.1password.com/docs/connect
+      1Password Connect access token. Create one via the Secrets
+      Automation workflow in your 1Password account under Developer >
+      Infrastructure Secrets, or use the CLI:
+      op connect token create <name> --server <server> --vault <vault>,r.
+      See https://developer.1password.com/docs/connect/manage-connect
 
 base_url: "{{input.ONEPASSWORD_CONNECT_URL}}"
 
@@ -45,15 +47,26 @@ tables:
     description: >-
       All 1Password vaults accessible to the Connect token. Use the
       `id` column as the `vault_id` filter on the `items` and
-      `item_details` tables.
+      `item_details` tables. Supports optional `name` filter
+      (server-side, exact match).
     guide: |
-      Entry-point table — no filter required. Returns all vaults
-      visible to the Connect token. `id` (UUID) is the value to pass
-      as `vault_id` when querying `items` or `item_details`. `item_count`
-      is the count of secrets stored in the vault.
+      Entry-point table — returns all vaults visible to the Connect
+      token by default. `id` (UUID) is the value to pass as `vault_id`
+      when querying `items` or `item_details`. `item_count` is the
+      count of secrets stored in the vault.
+
+      Optional filter `name` is pushed to the server as a SCIM
+      expression (`name eq "..."`). Use it to locate a vault by
+      exact display name without fetching the full list.
+    filters:
+      - name: name
     request:
       method: GET
       path: /vaults
+      query:
+        - name: filter
+          from: template
+          template: 'name eq "{{filter.name}}"'
     response:
       row_strategy: direct
     pagination:
@@ -148,9 +161,11 @@ tables:
   - name: items
     description: >-
       Item summaries in a 1Password vault. Requires `vault_id` (from
-      `onepassword.vaults.id`). Each row is one item with its title,
-      category, tags, and timestamps. Use `id` as the `item_id`
-      filter on the `item_details` table for full secret fields.
+      `onepassword.vaults.id`). Supports optional `title` filter
+      (server-side, exact match) and `tag` filter (client-side).
+      Each row is one item with its title, category, tags, and
+      timestamps. Use `id` as the `item_id` filter on the
+      `item_details` table for full secret fields.
     guide: |
       Requires `vault_id` — obtain it from `onepassword.vaults`.
       Each row is one item summary. `category` values include LOGIN,
@@ -158,12 +173,24 @@ tables:
       IDENTITY, DOCUMENT, SSH_KEY, SERVER, and others. To see the
       actual secret fields and values, query `onepassword.item_details`
       with both `vault_id` and `item_id`.
+
+      Optional filter `title` is pushed to the server as a SCIM
+      expression (`title eq "..."`). This avoids fetching the full
+      vault contents when you know the exact item name.
+
+      Optional filter `tag` is applied client-side after fetch.
     filters:
       - name: vault_id
         required: true
+      - name: title
+      - name: tag
     request:
       method: GET
       path: /vaults/{{filter.vault_id}}/items
+      query:
+        - name: filter
+          from: template
+          template: 'title eq "{{filter.title}}"'
     response:
       row_strategy: direct
     pagination:
