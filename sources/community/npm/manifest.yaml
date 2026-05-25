@@ -19,7 +19,7 @@ tables:
   - name: search
     description: >
       Searches npm packages by keyword. Each row includes the
-      package name, version, description, author, license,
+      package name, version, description, publisher, license,
       weekly and monthly download counts, dependent count, and
       quality scores. Use the text filter for keyword search.
       Combine with popularity or quality filters for
