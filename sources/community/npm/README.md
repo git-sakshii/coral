@@ -1,0 +1,67 @@
+# npm (npm)
+
+**Version:** 0.1.0
+**Backend:** HTTP
+**Tables:** 1
+**Base URL:** `https://registry.npmjs.org`
+
+Query the [public npm registry REST API](https://github.com/npm/registry/blob/master/docs/REGISTRY-API.md)
+to search for packages, inspect metadata, and retrieve download statistics and quality scores.
+
+```bash
+coral source add --file sources/community/npm/manifest.yaml
+```
+
+## Configuration
+
+This source does not require any authentication or input configuration. The npm registry search API is fully public.
+
+## Tables
+
+| Table        | Description                                            | Key filters               |
+| ------------ | ------------------------------------------------------ | ------------------------- |
+| `npm.search` | Search npm packages by keyword, ranked by popularity   | `text` (**required**)     |
+
+## Example queries
+
+```sql
+-- Search for packages matching 'express'
+SELECT name, version, description, weekly_downloads
+FROM npm.search
+WHERE text = 'express'
+LIMIT 10;
+
+-- Find highly popular React-related packages
+SELECT name, version, weekly_downloads, score_final
+FROM npm.search
+WHERE text = 'react'
+  AND popularity = '1.0'
+LIMIT 20;
+
+-- Search for packages with high maintenance scores
+SELECT name, description, score_maintenance
+FROM npm.search
+WHERE text = 'logger'
+  AND maintenance = '1.0'
+LIMIT 10;
+
+-- Inspect author and license information
+SELECT name, license, publisher_username, publisher_email
+FROM npm.search
+WHERE text = 'webpack'
+LIMIT 10;
+```
+
+## Pagination
+
+The `npm.search` table uses offset-based pagination (supported via `from` and `size` parameters).
+Coral handles this automatically — just use `LIMIT` to control how many rows you want.
+The default page size is 20, up to a maximum of 250.
+
+## Notes
+
+- **No authentication required.** The registry is completely public.
+- **Search criteria.** The API searches across package names, descriptions, and readmes.
+- **Rate limiting.** Be respectful of the public registry. Avoid aggressive polling loops.
+- **Dependents.** The `dependents` column is returned by the API as a string, not an integer.
+- **Scores.** Quality, popularity, and maintenance scores are floats between 0 and 1.
