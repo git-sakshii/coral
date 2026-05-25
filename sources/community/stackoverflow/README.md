@@ -103,3 +103,40 @@ how many rows you want.
   seconds to UTC timestamps.
 - **Anonymous paging limit.** Without an API key or access token,
   the API limits pagination to page 25 (750 rows at pagesize 30).
+
+## Validation
+
+```bash
+coral source lint sources/community/stackoverflow/manifest.yaml
+coral source add --file sources/community/stackoverflow/manifest.yaml
+coral source test stackoverflow
+coral sql "SELECT * FROM coral.tables WHERE schema_name = 'stackoverflow'"
+
+coral sql "SELECT question_id, title, score FROM stackoverflow.questions LIMIT 1"
+# +-------------+--------------------------------------------------------------------------+-------+
+# | question_id | title                                                                    | score |
+# +-------------+--------------------------------------------------------------------------+-------+
+# | 79946255    | How to enable &quot;Annotate with Git Blame&quot; using WebStorm 2026.1? | 0     |
+# +-------------+--------------------------------------------------------------------------+-------+
+
+coral sql "SELECT question_id, title, score FROM stackoverflow.search WHERE intitle = 'python' LIMIT 1"
+# +-------------+-----------------------------------------------+-------+
+# | question_id | title                                         | score |
+# +-------------+-----------------------------------------------+-------+
+# | 72108098    | Sorting words into alphabetic order in Python | -2    |
+# +-------------+-----------------------------------------------+-------+
+
+coral sql "SELECT answer_id, score, is_accepted FROM stackoverflow.answers LIMIT 1"
+# +-----------+-------+-------------+
+# | answer_id | score | is_accepted |
+# +-----------+-------+-------------+
+# | 53381692  | 76    | false       |
+# +-----------+-------+-------------+
+
+coral sql "SELECT name, count FROM stackoverflow.tags LIMIT 1"
+# +------------+---------+
+# | name       | count   |
+# +------------+---------+
+# | javascript | 2531304 |
+# +------------+---------+
+```
