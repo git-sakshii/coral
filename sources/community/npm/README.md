@@ -65,3 +65,26 @@ The default page size is 20, up to a maximum of 250.
 - **Rate limiting.** Be respectful of the public registry. Avoid aggressive polling loops.
 - **Dependents.** The `dependents` column is returned by the API as a string, not an integer.
 - **Scores.** Quality, popularity, and maintenance scores are floats between 0 and 1.
+
+## Validation
+
+```bash
+coral source lint sources/community/npm/manifest.yaml
+coral source add --file sources/community/npm/manifest.yaml
+coral source test npm
+coral sql "SELECT * FROM coral.tables WHERE schema_name = 'npm'"
+
+coral sql "SELECT name, version, description FROM npm.search WHERE text = 'express' LIMIT 1"
+# +---------+---------+-----------------------------------------------+
+# | name    | version | description                                   |
+# +---------+---------+-----------------------------------------------+
+# | express | 5.2.1   | Fast, unopinionated, minimalist web framework |
+# +---------+---------+-----------------------------------------------+
+
+coral sql "SELECT name, version, description FROM npm.search WHERE text = 'react' LIMIT 1"
+# +-------+---------+-------------------------------------------------------------+
+# | name  | version | description                                                 |
+# +-------+---------+-------------------------------------------------------------+
+# | react | 19.2.6  | React is a JavaScript library for building user interfaces. |
+# +-------+---------+-------------------------------------------------------------+
+```
