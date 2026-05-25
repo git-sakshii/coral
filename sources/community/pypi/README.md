@@ -59,3 +59,19 @@ not required.
 - **No authentication required.** The registry is completely public.
 - **Lookup only.** PyPI does not currently expose a JSON search endpoint, so you must know the exact name of the package you want to look up (via the `name` filter).
 - **Graceful missing packages.** If a package does not exist (404), the query gracefully returns zero rows rather than throwing an error.
+
+## Validation
+
+```bash
+coral source lint sources/community/pypi/manifest.yaml
+coral source add --file sources/community/pypi/manifest.yaml
+coral source test pypi
+coral sql "SELECT * FROM coral.tables WHERE schema_name = 'pypi'"
+
+coral sql "SELECT name, version, summary FROM pypi.packages WHERE name = 'requests' LIMIT 1"
+# +----------+---------+-------------------------+
+# | name     | version | summary                 |
+# +----------+---------+-------------------------+
+# | requests | 2.34.2  | Python HTTP for Humans. |
+# +----------+---------+-------------------------+
+```
