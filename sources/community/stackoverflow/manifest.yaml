@@ -283,9 +283,6 @@ tables:
           kind: from_filter
           key: sort
 
-  # FIX (High): moved from functions: — answers and tags are plain tables,
-  # not callable functions, and must live under tables: to resolve as
-  # stackoverflow.answers / stackoverflow.tags in SQL.
   - name: answers
     description: >
       Lists answers on the configured Stack Exchange site. Each row
@@ -435,7 +432,6 @@ tables:
             path:
               - last_edit_date
 
-  # FIX (High): moved from functions: — same reason as answers above.
   - name: tags
     description: >
       Lists tags on the configured Stack Exchange site sorted by
@@ -534,9 +530,6 @@ functions:
     args:
       - name: intitle
         required: true
-        # FIX (High): bind.arg was 'query', which did not match the
-        # request key 'intitle', so the parameter was never sent.
-        # Changed to 'intitle' so from: arg / key: intitle resolves.
         bind:
           arg: intitle
       - name: tagged
@@ -564,10 +557,6 @@ functions:
         - name: tagged
           from: arg
           key: tagged
-        # FIX (Medium): Stack Exchange /search defaults to sort=activity,
-        # not relevance. No hard-coded default is set here so callers
-        # control sorting explicitly; the description above has been
-        # updated to reflect the actual default behaviour.
         - name: sort
           from: arg
           key: sort
