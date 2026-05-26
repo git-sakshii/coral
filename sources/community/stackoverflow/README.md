@@ -18,7 +18,7 @@ coral source add --file sources/community/stackoverflow/manifest.yaml
 
 | Input                     | Kind       | Required | Default         | Description                                                  |
 | ------------------------- | ---------- | -------- | --------------- | ------------------------------------------------------------ |
-| `STACKOVERFLOW_API_KEY`   | variable   | no       | *(empty)*       | Stack Exchange API key for higher quota                      |
+| `STACKOVERFLOW_API_KEY`   | secret     | no       | *(empty)*       | Stack Exchange API key for higher quota                      |
 | `STACKOVERFLOW_SITE`      | variable   | no       | `stackoverflow` | Site to query (`serverfault`, `askubuntu`, `superuser`, etc.) |
 
 To obtain an API key, register an application at
@@ -27,12 +27,12 @@ for read-only access — the key only increases your daily request quota.
 
 ## Tables
 
-| Table                       | Description                                    | Key filters               |
-| --------------------------- | ---------------------------------------------- | ------------------------- |
-| `stackoverflow.questions`   | Browse questions by activity, votes, or tags   | `tagged`, `sort`          |
-| `stackoverflow.search`      | Search questions by title keyword              | `intitle` (**required**)  |
-| `stackoverflow.answers`     | Recent answers with score and acceptance status | —                         |
-| `stackoverflow.tags`        | Tags sorted by popularity with question counts | —                         |
+| Table / Function                  | Description                                    | Key filters / args        |
+| --------------------------------- | ---------------------------------------------- | ------------------------- |
+| `stackoverflow.questions`         | Browse questions by activity, votes, or tags   | `tagged`, `sort`          |
+| `stackoverflow.search_questions()`| Search questions by title keyword (function)   | `intitle` (**required**)  |
+| `stackoverflow.answers`           | Recent answers with score and acceptance status | —                         |
+| `stackoverflow.tags`              | Tags sorted by popularity with question counts | —                         |
 
 ## Example queries
 
@@ -54,18 +54,14 @@ FROM stackoverflow.questions
 WHERE tagged = 'python;django'
 LIMIT 10;
 
--- Search questions by title keyword
+-- Search questions by title keyword (search function)
 SELECT question_id, title, score, view_count
-FROM stackoverflow.search
-WHERE intitle = 'async await'
+FROM stackoverflow.search_questions('async await')
 LIMIT 10;
 
--- Search with tag and sort filters
+-- Search with tag and sort arguments
 SELECT question_id, title, score
-FROM stackoverflow.search
-WHERE intitle = 'dependency injection'
-  AND tagged = 'java'
-  AND sort = 'votes'
+FROM stackoverflow.search_questions('dependency injection', tagged => 'java', sort => 'votes')
 LIMIT 10;
 
 -- Recent answers
@@ -83,7 +79,8 @@ LIMIT 20;
 
 All tables use Stack Exchange page-based pagination (default page size 30,
 max 100). Coral handles this automatically — just use `LIMIT` to control
-how many rows you want.
+how many rows you want. Without an explicit `LIMIT`, results are capped at
+100 rows (`fetch_limit_default`) to avoid exhausting the API quota.
 
 ## Notes
 
@@ -93,16 +90,21 @@ how many rows you want.
 - **Read-only.** This source does not support write operations.
 - **HTML-encoded titles.** Question titles may contain HTML entities
   (e.g. `&amp;`, `&#39;`). Use them as-is or decode in your application.
-- **Tag AND logic.** The `tagged` filter uses semicolons for AND logic.
-  `tagged = 'python;django'` returns questions with **both** tags.
-  Passing more than 5 tags always returns zero results.
+- **Tag semantics differ by endpoint.** On `stackoverflow.questions`,
+  `tagged = 'python;django'` uses AND logic (questions with **both**
+  tags). On `search_questions()`, `tagged` uses OR logic (questions
+  with **at least one** of the tags). Passing more than 5 tags
+  always returns zero results.
 - **Configurable site.** Set `STACKOVERFLOW_SITE` to query any Stack
   Exchange network site: `serverfault`, `askubuntu`, `superuser`,
   `math`, `unix`, etc.
 - **Timestamps.** All date columns are converted from Unix epoch
   seconds to UTC timestamps.
-- **Anonymous paging limit.** Without an API key or access token,
-  the API limits pagination to page 25 (750 rows at pagesize 30).
+- **Pagination and quota limits.** Without an API key, the API limits
+  pagination to page 25 (750 rows at pagesize 30) and allows 300
+  requests/day. The API may return a `backoff` field requiring you to
+  wait before the next request. Coral respects `has_more` to stop
+  paginating. Always use `LIMIT` to stay within quota.
 
 ## Validation
 
@@ -119,7 +121,7 @@ coral sql "SELECT question_id, title, score FROM stackoverflow.questions LIMIT 1
 # | 79946255    | How to enable &quot;Annotate with Git Blame&quot; using WebStorm 2026.1? | 0     |
 # +-------------+--------------------------------------------------------------------------+-------+
 
-coral sql "SELECT question_id, title, score FROM stackoverflow.search WHERE intitle = 'python' LIMIT 1"
+coral sql "SELECT question_id, title, score FROM stackoverflow.search_questions('python') LIMIT 1"
 # +-------------+-----------------------------------------------+-------+
 # | question_id | title                                         | score |
 # +-------------+-----------------------------------------------+-------+

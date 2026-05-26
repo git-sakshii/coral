@@ -11,8 +11,7 @@ base_url: https://api.stackexchange.com/2.3
 
 inputs:
   STACKOVERFLOW_API_KEY:
-    kind: variable
-    default: ""
+    kind: secret
     hint: >-
       Optional Stack Exchange API key for a higher request quota.
       Register an app at https://stackapps.com/apps/oauth/register
@@ -33,8 +32,7 @@ test_queries:
     FROM stackoverflow.questions LIMIT 1
   - >-
     SELECT question_id, title, score
-    FROM stackoverflow.search
-    WHERE intitle = 'python' LIMIT 1
+    FROM stackoverflow.search_questions('python') LIMIT 1
   - >-
     SELECT answer_id, score, is_accepted
     FROM stackoverflow.answers LIMIT 1
@@ -55,6 +53,7 @@ tables:
       `WHERE tagged = 'rust'` to filter by tag. Tags use semicolon
       AND logic: `tagged = 'python;django'` returns questions
       tagged with both.
+    fetch_limit_default: 100
     filters:
       - name: tagged
       - name: sort
@@ -82,6 +81,8 @@ tables:
         - items
     pagination:
       mode: page
+      page_param: page
+      page_start: 1
       page_size:
         default: 30
         max: 100
@@ -282,22 +283,31 @@ tables:
           kind: from_filter
           key: sort
 
-  - name: search
-    description: >
-      Searches questions by title keyword on the configured Stack
-      Exchange site. Supports filtering by tags and sorting by
-      activity, votes, creation date, or relevance. Requires the
-      intitle filter. Use for keyword-based question discovery.
-    guide: >
-      Always provide intitle: `SELECT question_id, title, score
-      FROM stackoverflow.search WHERE intitle = 'async await'
-      LIMIT 10`. Combine with `tagged = 'python'` and
-      `sort = 'votes'` for targeted results.
-    filters:
+functions:
+  - name: search_questions
+    kind: search
+    description: >-
+      Provider-native search for Stack Exchange questions by title
+      keyword. Returns questions ranked by relevance. The tagged
+      argument filters to questions with at least one of the
+      specified tags (semicolon-delimited OR, unlike the AND
+      logic on the questions table).
+    fetch_limit_default: 100
+    search_limits:
+      default_top_k: 10
+      max_top_k: 250
+      max_calls_per_query: 1
+    args:
       - name: intitle
         required: true
+        bind:
+          arg: query
       - name: tagged
+        bind:
+          arg: tagged
       - name: sort
+        bind:
+          arg: sort
     request:
       method: GET
       path: /search
@@ -312,19 +322,21 @@ tables:
           from: literal
           value: desc
         - name: intitle
-          from: filter
+          from: arg
           key: intitle
         - name: tagged
-          from: filter
+          from: arg
           key: tagged
         - name: sort
-          from: filter
+          from: arg
           key: sort
     response:
       rows_path:
         - items
     pagination:
       mode: page
+      page_param: page
+      page_start: 1
       page_size:
         default: 30
         max: 100
@@ -465,34 +477,6 @@ tables:
           kind: path
           path:
             - content_license
-      - name: intitle
-        type: Utf8
-        nullable: true
-        virtual: true
-        description: >-
-          Required keyword to match in question titles.
-        expr:
-          kind: from_filter
-          key: intitle
-      - name: tagged_filter
-        type: Utf8
-        nullable: true
-        virtual: true
-        description: >-
-          Echoes the tagged filter value.
-        expr:
-          kind: from_filter
-          key: tagged
-      - name: sort_filter
-        type: Utf8
-        nullable: true
-        virtual: true
-        description: >-
-          Echoes the sort filter (activity, votes, creation,
-          relevance).
-        expr:
-          kind: from_filter
-          key: sort
 
   - name: answers
     description: >
@@ -502,6 +486,7 @@ tables:
     guide: >
       Start with `SELECT answer_id, question_id, score,
       is_accepted FROM stackoverflow.answers LIMIT 10`.
+    fetch_limit_default: 100
     request:
       method: GET
       path: /answers
@@ -523,6 +508,8 @@ tables:
         - items
     pagination:
       mode: page
+      page_param: page
+      page_start: 1
       page_size:
         default: 30
         max: 100
@@ -648,6 +635,7 @@ tables:
     guide: >
       Start with `SELECT name, count, has_synonyms FROM
       stackoverflow.tags LIMIT 20` to see the most popular tags.
+    fetch_limit_default: 100
     request:
       method: GET
       path: /tags
@@ -669,6 +657,8 @@ tables:
         - items
     pagination:
       mode: page
+      page_param: page
+      page_start: 1
       page_size:
         default: 30
         max: 100
