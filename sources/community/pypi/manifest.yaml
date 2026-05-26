@@ -3,7 +3,7 @@ version: 0.1.0
 dsl_version: 3
 backend: http
 description: >-
-  Query Python package metadata, release history, and project URLs
+  Query Python package metadata and project URLs
   via the public PyPI JSON API. No authentication required.
 base_url: https://pypi.org
 
@@ -17,8 +17,8 @@ tables:
     description: >
       Look up metadata for a specific Python package on PyPI.
       Requires the package name as a filter. Returns a single row
-      containing package info, URLs, author details, and release
-      metrics if the package exists.
+      containing package info, URLs, and author details if the
+      package exists.
     guide: >
       Start with `SELECT name, version, summary, author, license
       FROM pypi.packages WHERE name = 'requests'`. You must provide
@@ -156,6 +156,18 @@ tables:
           path:
             - info
             - home_page
+      - name: project_urls
+        type: Json
+        nullable: true
+        description: >-
+          JSON object mapping label to URL (e.g. Source, Documentation,
+          Issue Tracker). Modern packages use this instead of home_page
+          or docs_url.
+        expr:
+          kind: path
+          path:
+            - info
+            - project_urls
       - name: requires_dist
         type: Json
         nullable: true

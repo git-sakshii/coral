@@ -6,7 +6,7 @@
 **Base URL:** `https://pypi.org`
 
 Query Python package metadata, dependencies, author information, and
-project URLs via the public [PyPI JSON API](https://warehouse.pypa.io/api-reference/json.html).
+project URLs via the public [PyPI JSON API](https://docs.pypi.org/api/json/).
 No authentication required.
 
 ```bash
@@ -37,7 +37,7 @@ FROM pypi.packages
 WHERE name = 'django';
 
 -- Get project URLs and classifiers
-SELECT project_url, docs_url, home_page, classifiers
+SELECT project_url, docs_url, home_page, project_urls, classifiers
 FROM pypi.packages
 WHERE name = 'flask';
 
@@ -59,6 +59,7 @@ not required.
 - **No authentication required.** The registry is completely public.
 - **Lookup only.** PyPI does not currently expose a JSON search endpoint, so you must know the exact name of the package you want to look up (via the `name` filter).
 - **Graceful missing packages.** If a package does not exist (404), the query gracefully returns zero rows rather than throwing an error.
+- **API policy.** PyPI does not currently enforce rate limits, but responses may be cached. Please consume the API responsibly: set a descriptive `User-Agent`, avoid unnecessary high-frequency polling, and prefer the [Simple/Index API](https://docs.pypi.org/api/index-api/) for bulk package-listing or distribution-file operations. See the [PyPI API policies](https://docs.pypi.org/api/#api-policies) for the latest guidance.
 
 ## Validation
 
