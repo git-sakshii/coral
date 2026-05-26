@@ -35,14 +35,14 @@ LIMIT 10;
 SELECT name, version, weekly_downloads, score_final
 FROM npm.search
 WHERE text = 'react'
-  AND popularity_weight = '1.0'
+  AND popularity_weight = 1.0
 LIMIT 20;
 
 -- Boost packages with high maintenance scores
 SELECT name, description, score_maintenance
 FROM npm.search
 WHERE text = 'logger'
-  AND maintenance_weight = '1.0'
+  AND maintenance_weight = 1.0
 LIMIT 10;
 
 -- Inspect author and license information
@@ -63,7 +63,15 @@ avoid unbounded scans against the public registry.
 ## Notes
 
 - **No authentication required.** The registry is completely public.
-- **Search criteria.** The `text` filter searches package names, descriptions, and readmes. npm also supports [special search qualifiers](https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md#get-v1search) inside the `text` value: `author:`, `maintainer:`, `scope:`, `keywords:`, `not:unstable`, `not:insecure`, and `is:insecure`.
+- **Search criteria.** The `text` filter searches package names, descriptions, and readmes. npm supports a number of [special search qualifiers](https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md#get-v1search) inside the `text` value — the list below is a selection of common ones; refer to the API docs for the full set:
+  - `author:<name>` — packages published by a specific author
+  - `maintainer:<name>` — packages with a specific maintainer
+  - `scope:<scope>` — scoped packages (e.g. `scope:babel`)
+  - `keywords:<kw>` — packages with a specific keyword
+  - `not:unstable` — exclude pre-release versions
+  - `not:insecure` / `is:insecure` — filter by security status
+  - `is:unstable` — include only pre-release versions
+  - `boost-exact:false` — disable exact-name boosting in ranking
 - **Ranking weights.** `popularity_weight`, `quality_weight`, and `maintenance_weight` are floats between 0.0 and 1.0 that influence how npm ranks search results — they are not restrictive filters.
 - **Rate limiting.** The npm registry is a shared public resource. Avoid aggressive polling loops, use `LIMIT` to fetch only what you need, and do not run broad queries without a `LIMIT` clause.
 - **Dependents.** The `dependents` column is returned by the API as a string, not an integer.
