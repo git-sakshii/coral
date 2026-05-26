@@ -283,14 +283,248 @@ tables:
           kind: from_filter
           key: sort
 
+  # FIX (High): moved from functions: — answers and tags are plain tables,
+  # not callable functions, and must live under tables: to resolve as
+  # stackoverflow.answers / stackoverflow.tags in SQL.
+  - name: answers
+    description: >
+      Lists answers on the configured Stack Exchange site. Each row
+      includes the answer score, acceptance status, and author info.
+      Coral handles page-based pagination automatically.
+    guide: >
+      Start with `SELECT answer_id, question_id, score,
+      is_accepted FROM stackoverflow.answers LIMIT 10`.
+    fetch_limit_default: 100
+    request:
+      method: GET
+      path: /answers
+      query:
+        - name: site
+          from: input
+          key: STACKOVERFLOW_SITE
+        - name: key
+          from: input
+          key: STACKOVERFLOW_API_KEY
+        - name: order
+          from: literal
+          value: desc
+        - name: sort
+          from: literal
+          value: activity
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: page
+      page_param: page
+      page_start: 1
+      page_size:
+        default: 30
+        max: 100
+        query_param: pagesize
+    columns:
+      - name: answer_id
+        type: Int64
+        nullable: false
+        description: Unique answer identifier.
+        expr:
+          kind: path
+          path:
+            - answer_id
+      - name: question_id
+        type: Int64
+        nullable: true
+        description: ID of the parent question.
+        expr:
+          kind: path
+          path:
+            - question_id
+      - name: score
+        type: Int64
+        nullable: true
+        description: Net vote score (upvotes minus downvotes).
+        expr:
+          kind: path
+          path:
+            - score
+      - name: is_accepted
+        type: Boolean
+        nullable: true
+        description: Whether this answer is accepted.
+        expr:
+          kind: path
+          path:
+            - is_accepted
+      - name: owner_user_id
+        type: Int64
+        nullable: true
+        description: User ID of the answer author.
+        expr:
+          kind: path
+          path:
+            - owner
+            - user_id
+      - name: owner_display_name
+        type: Utf8
+        nullable: true
+        description: Display name of the answer author.
+        expr:
+          kind: path
+          path:
+            - owner
+            - display_name
+      - name: owner_reputation
+        type: Int64
+        nullable: true
+        description: Reputation score of the answer author.
+        expr:
+          kind: path
+          path:
+            - owner
+            - reputation
+      - name: owner_link
+        type: Utf8
+        nullable: true
+        description: Profile URL of the answer author.
+        expr:
+          kind: path
+          path:
+            - owner
+            - link
+      - name: content_license
+        type: Utf8
+        nullable: true
+        description: >-
+          Content license (typically CC BY-SA 4.0).
+        expr:
+          kind: path
+          path:
+            - content_license
+      - name: creation_date
+        type: Timestamp
+        nullable: true
+        description: When the answer was posted.
+        expr:
+          kind: format_timestamp
+          input: seconds
+          expr:
+            kind: path
+            path:
+              - creation_date
+      - name: last_activity_date
+        type: Timestamp
+        nullable: true
+        description: >-
+          Last activity time (edit or comment).
+        expr:
+          kind: format_timestamp
+          input: seconds
+          expr:
+            kind: path
+            path:
+              - last_activity_date
+      - name: last_edit_date
+        type: Timestamp
+        nullable: true
+        description: Last time the answer was edited.
+        expr:
+          kind: format_timestamp
+          input: seconds
+          expr:
+            kind: path
+            path:
+              - last_edit_date
+
+  # FIX (High): moved from functions: — same reason as answers above.
+  - name: tags
+    description: >
+      Lists tags on the configured Stack Exchange site sorted by
+      popularity. Each row includes the tag name, question count,
+      and metadata about synonyms and moderation status.
+    guide: >
+      Start with `SELECT name, count, has_synonyms FROM
+      stackoverflow.tags LIMIT 20` to see the most popular tags.
+    fetch_limit_default: 100
+    request:
+      method: GET
+      path: /tags
+      query:
+        - name: site
+          from: input
+          key: STACKOVERFLOW_SITE
+        - name: key
+          from: input
+          key: STACKOVERFLOW_API_KEY
+        - name: order
+          from: literal
+          value: desc
+        - name: sort
+          from: literal
+          value: popular
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: page
+      page_param: page
+      page_start: 1
+      page_size:
+        default: 30
+        max: 100
+        query_param: pagesize
+    columns:
+      - name: name
+        type: Utf8
+        nullable: false
+        description: Tag name (e.g. javascript, python, rust).
+        expr:
+          kind: path
+          path:
+            - name
+      - name: count
+        type: Int64
+        nullable: true
+        description: >-
+          Number of questions tagged with this tag.
+        expr:
+          kind: path
+          path:
+            - count
+      - name: has_synonyms
+        type: Boolean
+        nullable: true
+        description: Whether the tag has synonyms defined.
+        expr:
+          kind: path
+          path:
+            - has_synonyms
+      - name: is_moderator_only
+        type: Boolean
+        nullable: true
+        description: Whether the tag is restricted to moderators.
+        expr:
+          kind: path
+          path:
+            - is_moderator_only
+      - name: is_required
+        type: Boolean
+        nullable: true
+        description: >-
+          Whether the tag is required on at least one question.
+        expr:
+          kind: path
+          path:
+            - is_required
+
 functions:
   - name: search_questions
     kind: search
     description: >-
       Provider-native search for Stack Exchange questions by title
-      keyword. Returns questions ranked by relevance. The tagged
-      argument filters to questions with at least one of the
-      specified tags (semicolon-delimited OR, unlike the AND
+      keyword. Returns questions sorted by activity by default;
+      pass `sort => 'relevance'` to rank by relevance instead.
+      The tagged argument filters to questions with at least one of
+      the specified tags (semicolon-delimited OR, unlike the AND
       logic on the questions table).
     fetch_limit_default: 100
     search_limits:
@@ -300,8 +534,11 @@ functions:
     args:
       - name: intitle
         required: true
+        # FIX (High): bind.arg was 'query', which did not match the
+        # request key 'intitle', so the parameter was never sent.
+        # Changed to 'intitle' so from: arg / key: intitle resolves.
         bind:
-          arg: query
+          arg: intitle
       - name: tagged
         bind:
           arg: tagged
@@ -327,6 +564,10 @@ functions:
         - name: tagged
           from: arg
           key: tagged
+        # FIX (Medium): Stack Exchange /search defaults to sort=activity,
+        # not relevance. No hard-coded default is set here so callers
+        # control sorting explicitly; the description above has been
+        # updated to reflect the actual default behaviour.
         - name: sort
           from: arg
           key: sort
@@ -477,232 +718,3 @@ functions:
           kind: path
           path:
             - content_license
-
-  - name: answers
-    description: >
-      Lists answers on the configured Stack Exchange site. Each row
-      includes the answer score, acceptance status, and author info.
-      Coral handles page-based pagination automatically.
-    guide: >
-      Start with `SELECT answer_id, question_id, score,
-      is_accepted FROM stackoverflow.answers LIMIT 10`.
-    fetch_limit_default: 100
-    request:
-      method: GET
-      path: /answers
-      query:
-        - name: site
-          from: input
-          key: STACKOVERFLOW_SITE
-        - name: key
-          from: input
-          key: STACKOVERFLOW_API_KEY
-        - name: order
-          from: literal
-          value: desc
-        - name: sort
-          from: literal
-          value: activity
-    response:
-      rows_path:
-        - items
-    pagination:
-      mode: page
-      page_param: page
-      page_start: 1
-      page_size:
-        default: 30
-        max: 100
-        query_param: pagesize
-    columns:
-      - name: answer_id
-        type: Int64
-        nullable: false
-        description: Unique answer identifier.
-        expr:
-          kind: path
-          path:
-            - answer_id
-      - name: question_id
-        type: Int64
-        nullable: true
-        description: ID of the parent question.
-        expr:
-          kind: path
-          path:
-            - question_id
-      - name: score
-        type: Int64
-        nullable: true
-        description: Net vote score (upvotes minus downvotes).
-        expr:
-          kind: path
-          path:
-            - score
-      - name: is_accepted
-        type: Boolean
-        nullable: true
-        description: Whether this answer is accepted.
-        expr:
-          kind: path
-          path:
-            - is_accepted
-      - name: owner_user_id
-        type: Int64
-        nullable: true
-        description: User ID of the answer author.
-        expr:
-          kind: path
-          path:
-            - owner
-            - user_id
-      - name: owner_display_name
-        type: Utf8
-        nullable: true
-        description: Display name of the answer author.
-        expr:
-          kind: path
-          path:
-            - owner
-            - display_name
-      - name: owner_reputation
-        type: Int64
-        nullable: true
-        description: Reputation score of the answer author.
-        expr:
-          kind: path
-          path:
-            - owner
-            - reputation
-      - name: owner_link
-        type: Utf8
-        nullable: true
-        description: Profile URL of the answer author.
-        expr:
-          kind: path
-          path:
-            - owner
-            - link
-      - name: content_license
-        type: Utf8
-        nullable: true
-        description: >-
-          Content license (typically CC BY-SA 4.0).
-        expr:
-          kind: path
-          path:
-            - content_license
-      - name: creation_date
-        type: Timestamp
-        nullable: true
-        description: When the answer was posted.
-        expr:
-          kind: format_timestamp
-          input: seconds
-          expr:
-            kind: path
-            path:
-              - creation_date
-      - name: last_activity_date
-        type: Timestamp
-        nullable: true
-        description: >-
-          Last activity time (edit or comment).
-        expr:
-          kind: format_timestamp
-          input: seconds
-          expr:
-            kind: path
-            path:
-              - last_activity_date
-      - name: last_edit_date
-        type: Timestamp
-        nullable: true
-        description: Last time the answer was edited.
-        expr:
-          kind: format_timestamp
-          input: seconds
-          expr:
-            kind: path
-            path:
-              - last_edit_date
-
-  - name: tags
-    description: >
-      Lists tags on the configured Stack Exchange site sorted by
-      popularity. Each row includes the tag name, question count,
-      and metadata about synonyms and moderation status.
-    guide: >
-      Start with `SELECT name, count, has_synonyms FROM
-      stackoverflow.tags LIMIT 20` to see the most popular tags.
-    fetch_limit_default: 100
-    request:
-      method: GET
-      path: /tags
-      query:
-        - name: site
-          from: input
-          key: STACKOVERFLOW_SITE
-        - name: key
-          from: input
-          key: STACKOVERFLOW_API_KEY
-        - name: order
-          from: literal
-          value: desc
-        - name: sort
-          from: literal
-          value: popular
-    response:
-      rows_path:
-        - items
-    pagination:
-      mode: page
-      page_param: page
-      page_start: 1
-      page_size:
-        default: 30
-        max: 100
-        query_param: pagesize
-    columns:
-      - name: name
-        type: Utf8
-        nullable: false
-        description: Tag name (e.g. javascript, python, rust).
-        expr:
-          kind: path
-          path:
-            - name
-      - name: count
-        type: Int64
-        nullable: true
-        description: >-
-          Number of questions tagged with this tag.
-        expr:
-          kind: path
-          path:
-            - count
-      - name: has_synonyms
-        type: Boolean
-        nullable: true
-        description: Whether the tag has synonyms defined.
-        expr:
-          kind: path
-          path:
-            - has_synonyms
-      - name: is_moderator_only
-        type: Boolean
-        nullable: true
-        description: Whether the tag is restricted to moderators.
-        expr:
-          kind: path
-          path:
-            - is_moderator_only
-      - name: is_required
-        type: Boolean
-        nullable: true
-        description: >-
-          Whether the tag is required on at least one question.
-        expr:
-          kind: path
-          path:
-            - is_required
