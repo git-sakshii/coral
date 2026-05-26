@@ -31,18 +31,18 @@ FROM npm.search
 WHERE text = 'express'
 LIMIT 10;
 
--- Find highly popular React-related packages
+-- Boost popular React-related packages in results
 SELECT name, version, weekly_downloads, score_final
 FROM npm.search
 WHERE text = 'react'
-  AND popularity = '1.0'
+  AND popularity_weight = '1.0'
 LIMIT 20;
 
--- Search for packages with high maintenance scores
+-- Boost packages with high maintenance scores
 SELECT name, description, score_maintenance
 FROM npm.search
 WHERE text = 'logger'
-  AND maintenance = '1.0'
+  AND maintenance_weight = '1.0'
 LIMIT 10;
 
 -- Inspect author and license information
@@ -57,12 +57,15 @@ LIMIT 10;
 The `npm.search` table uses offset-based pagination (supported via `from` and `size` parameters).
 Coral handles this automatically — just use `LIMIT` to control how many rows you want.
 The default page size is 20, up to a maximum of 250.
+Without an explicit `LIMIT`, results are capped at 100 rows (`fetch_limit_default`) to
+avoid unbounded scans against the public registry.
 
 ## Notes
 
 - **No authentication required.** The registry is completely public.
-- **Search criteria.** The API searches across package names, descriptions, and readmes.
-- **Rate limiting.** Be respectful of the public registry. Avoid aggressive polling loops.
+- **Search criteria.** The `text` filter searches package names, descriptions, and readmes. npm also supports [special search qualifiers](https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md#get-v1search) inside the `text` value: `author:`, `maintainer:`, `scope:`, `keywords:`, `not:unstable`, `not:insecure`, and `is:insecure`.
+- **Ranking weights.** `popularity_weight`, `quality_weight`, and `maintenance_weight` are floats between 0.0 and 1.0 that influence how npm ranks search results — they are not restrictive filters.
+- **Rate limiting.** The npm registry is a shared public resource. Avoid aggressive polling loops, use `LIMIT` to fetch only what you need, and do not run broad queries without a `LIMIT` clause.
 - **Dependents.** The `dependents` column is returned by the API as a string, not an integer.
 - **Scores.** Quality, popularity, and maintenance scores are floats between 0 and 1.
 
