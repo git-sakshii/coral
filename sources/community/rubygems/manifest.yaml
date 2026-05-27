@@ -1,0 +1,413 @@
+name: rubygems
+version: 0.1.0
+dsl_version: 3
+backend: http
+description: Search gems, inspect versions, and browse activity on RubyGems.org. No auth required.
+base_url: https://rubygems.org
+
+test_queries:
+  - SELECT * FROM rubygems.search WHERE query = 'rails' LIMIT 1
+  - SELECT * FROM rubygems.gem WHERE gem_name = 'rails' LIMIT 1
+  - SELECT * FROM rubygems.versions WHERE gem_name = 'rails' LIMIT 1
+  - SELECT * FROM rubygems.latest LIMIT 1
+  - SELECT * FROM rubygems.just_updated LIMIT 1
+
+tables:
+  # ──────────────────────────────────────────────────────────────────────
+  # search — keyword search across all gems
+  # ──────────────────────────────────────────────────────────────────────
+  - name: search
+    description: |
+      Search RubyGems.org for active gems by keyword. Returns up to 30 gems
+      per page. Requires WHERE query = 'keyword'.
+    guide: >
+      Use this table to discover gems by keyword. Each row is one gem at its
+      latest published version. For the full version history of a specific gem,
+      use rubygems.versions with WHERE gem_name = 'name'. For gem details
+      without keyword search, use rubygems.gem.
+    fetch_limit_default: 30
+    filters:
+      - name: query
+        required: true
+    request:
+      method: GET
+      path: /api/v1/search.json
+      query:
+        - name: query
+          from: filter
+          key: query
+    response:
+      rows_path: []
+    pagination:
+      mode: page
+      page_param: page
+      page_start: 1
+      page_step: 1
+      page_size:
+        default: 30
+        max: 30
+        query_param: page
+    columns:
+      - name: name
+        type: Utf8
+        nullable: false
+        description: Gem name as published on RubyGems.org.
+      - name: downloads
+        type: Int64
+        nullable: true
+        description: Total all-time download count for this gem.
+      - name: version
+        type: Utf8
+        nullable: true
+        description: Latest published version string.
+      - name: version_downloads
+        type: Int64
+        nullable: true
+        description: Download count for the latest version only.
+      - name: authors
+        type: Utf8
+        nullable: true
+        description: Comma-separated list of gem authors.
+      - name: info
+        type: Utf8
+        nullable: true
+        description: Short description of the gem.
+      - name: licenses
+        type: Utf8
+        nullable: true
+        description: Comma-joined SPDX license identifiers, e.g. MIT or Apache-2.0.
+        expr:
+          kind: join_array
+          path:
+            - licenses
+      - name: project_uri
+        type: Utf8
+        nullable: true
+        description: RubyGems.org page URL for this gem.
+      - name: homepage_uri
+        type: Utf8
+        nullable: true
+        description: Project homepage URL, if set.
+      - name: source_code_uri
+        type: Utf8
+        nullable: true
+        description: Source code repository URL, if set.
+      - name: bug_tracker_uri
+        type: Utf8
+        nullable: true
+        description: Issue tracker URL, if set.
+      - name: documentation_uri
+        type: Utf8
+        nullable: true
+        description: Documentation URL, if set.
+      - name: changelog_uri
+        type: Utf8
+        nullable: true
+        description: Changelog URL, if set.
+      - name: dependencies
+        type: Json
+        nullable: true
+        description: Runtime and development dependencies as a JSON object.
+      - name: query
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Echoes the query filter used for this scan.
+        expr:
+          kind: from_filter
+          key: query
+
+  # ──────────────────────────────────────────────────────────────────────
+  # gem — single gem lookup by exact name
+  # ──────────────────────────────────────────────────────────────────────
+  - name: gem
+    description: |
+      Fetch full details for a single gem by name. Returns one row.
+      Requires WHERE gem_name = 'name'.
+    guide: >
+      Use this table for a fast lookup of a known gem by exact name.
+      For keyword search across all gems, use rubygems.search.
+      For version history, use rubygems.versions.
+    filters:
+      - name: gem_name
+        required: true
+    request:
+      method: GET
+      path: /api/v1/gems/{{filter.gem_name}}.json
+    response: {}
+    pagination:
+      mode: none
+    columns:
+      - name: name
+        type: Utf8
+        nullable: false
+        description: Gem name.
+      - name: downloads
+        type: Int64
+        nullable: true
+        description: Total all-time download count.
+      - name: version
+        type: Utf8
+        nullable: true
+        description: Latest published version string.
+      - name: version_downloads
+        type: Int64
+        nullable: true
+        description: Download count for the latest version.
+      - name: authors
+        type: Utf8
+        nullable: true
+        description: Comma-separated list of gem authors.
+      - name: info
+        type: Utf8
+        nullable: true
+        description: Short description of the gem.
+      - name: licenses
+        type: Utf8
+        nullable: true
+        description: Comma-joined SPDX license identifiers.
+        expr:
+          kind: join_array
+          path:
+            - licenses
+      - name: project_uri
+        type: Utf8
+        nullable: true
+        description: RubyGems.org page URL.
+      - name: homepage_uri
+        type: Utf8
+        nullable: true
+        description: Project homepage URL, if set.
+      - name: source_code_uri
+        type: Utf8
+        nullable: true
+        description: Source code repository URL, if set.
+      - name: bug_tracker_uri
+        type: Utf8
+        nullable: true
+        description: Issue tracker URL, if set.
+      - name: documentation_uri
+        type: Utf8
+        nullable: true
+        description: Documentation URL, if set.
+      - name: changelog_uri
+        type: Utf8
+        nullable: true
+        description: Changelog URL, if set.
+      - name: dependencies
+        type: Json
+        nullable: true
+        description: Runtime and development dependencies as a JSON object.
+      - name: gem_name
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Echoes the gem_name filter used for this lookup.
+        expr:
+          kind: from_filter
+          key: gem_name
+
+  # ──────────────────────────────────────────────────────────────────────
+  # versions — all published versions of a gem
+  # ──────────────────────────────────────────────────────────────────────
+  - name: versions
+    description: |
+      List all published versions of a gem. Returns one row per version.
+      Requires WHERE gem_name = 'name'.
+    guide: >
+      Use this table to audit the version history of a known gem, check for
+      prerelease versions, inspect platform variants, or verify licenses per
+      version. For the latest version summary only, use rubygems.gem.
+    filters:
+      - name: gem_name
+        required: true
+    request:
+      method: GET
+      path: /api/v1/versions/{{filter.gem_name}}.json
+    response:
+      rows_path: []
+    pagination:
+      mode: none
+    columns:
+      - name: number
+        type: Utf8
+        nullable: false
+        description: Version string e.g. 7.1.3 or 2.0.0.beta1.
+      - name: authors
+        type: Utf8
+        nullable: true
+        description: Comma-separated authors for this version.
+      - name: built_at
+        type: Timestamp
+        nullable: true
+        description: Time when the .gem file was built.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - built_at
+      - name: created_at
+        type: Timestamp
+        nullable: true
+        description: Time when this version was published to RubyGems.org.
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - created_at
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Full description for this version.
+      - name: summary
+        type: Utf8
+        nullable: true
+        description: One-line summary for this version.
+      - name: downloads_count
+        type: Int64
+        nullable: true
+        description: Total downloads for this specific version.
+      - name: platform
+        type: Utf8
+        nullable: true
+        description: Target platform e.g. ruby, java, x86_64-linux.
+      - name: ruby_version
+        type: Utf8
+        nullable: true
+        description: Required Ruby version constraint, if specified.
+      - name: prerelease
+        type: Boolean
+        nullable: true
+        description: True if this is a prerelease version.
+      - name: licenses
+        type: Utf8
+        nullable: true
+        description: Comma-joined SPDX license identifiers for this version.
+        expr:
+          kind: join_array
+          path:
+            - licenses
+      - name: sha
+        type: Utf8
+        nullable: true
+        description: SHA256 checksum of the .gem file.
+      - name: gem_name
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Echoes the gem_name filter used for this scan.
+        expr:
+          kind: from_filter
+          key: gem_name
+
+  # ──────────────────────────────────────────────────────────────────────
+  # latest — most recently published gems
+  # ──────────────────────────────────────────────────────────────────────
+  - name: latest
+    description: The 50 gems most recently published to RubyGems.org for the first time.
+    guide: >
+      Use this table to monitor newly added gems or discover what is being
+      published. Returns at most 50 rows with no filters required.
+      For recently updated gems, use rubygems.just_updated.
+    request:
+      method: GET
+      path: /api/v1/activity/latest.json
+    response:
+      rows_path: []
+    pagination:
+      mode: none
+    columns:
+      - name: name
+        type: Utf8
+        nullable: false
+        description: Gem name.
+      - name: downloads
+        type: Int64
+        nullable: true
+        description: Total all-time download count.
+      - name: version
+        type: Utf8
+        nullable: true
+        description: Latest published version string.
+      - name: authors
+        type: Utf8
+        nullable: true
+        description: Comma-separated authors.
+      - name: info
+        type: Utf8
+        nullable: true
+        description: Short description.
+      - name: licenses
+        type: Utf8
+        nullable: true
+        description: Comma-joined SPDX license identifiers.
+        expr:
+          kind: join_array
+          path:
+            - licenses
+      - name: project_uri
+        type: Utf8
+        nullable: true
+        description: RubyGems.org page URL.
+      - name: source_code_uri
+        type: Utf8
+        nullable: true
+        description: Source code repository URL, if set.
+
+  # ──────────────────────────────────────────────────────────────────────
+  # just_updated — most recently updated gems
+  # ──────────────────────────────────────────────────────────────────────
+  - name: just_updated
+    description: The 50 gems most recently updated on RubyGems.org.
+    guide: >
+      Use this table to track recent gem releases and updates. Returns at most
+      50 rows with no filters required. For newly created gems, use
+      rubygems.latest.
+    request:
+      method: GET
+      path: /api/v1/activity/just_updated.json
+    response:
+      rows_path: []
+    pagination:
+      mode: none
+    columns:
+      - name: name
+        type: Utf8
+        nullable: false
+        description: Gem name.
+      - name: downloads
+        type: Int64
+        nullable: true
+        description: Total all-time download count.
+      - name: version
+        type: Utf8
+        nullable: true
+        description: Latest published version string.
+      - name: authors
+        type: Utf8
+        nullable: true
+        description: Comma-separated authors.
+      - name: info
+        type: Utf8
+        nullable: true
+        description: Short description.
+      - name: licenses
+        type: Utf8
+        nullable: true
+        description: Comma-joined SPDX license identifiers.
+        expr:
+          kind: join_array
+          path:
+            - licenses
+      - name: project_uri
+        type: Utf8
+        nullable: true
+        description: RubyGems.org page URL.
+      - name: source_code_uri
+        type: Utf8
+        nullable: true
+        description: Source code repository URL, if set.
