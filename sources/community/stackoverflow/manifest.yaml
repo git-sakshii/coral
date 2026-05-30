@@ -3,20 +3,11 @@ version: 0.1.0
 dsl_version: 3
 backend: http
 description: >-
-  Stack Overflow questions, answers, search results, and tags via the
-  public Stack Exchange REST API v2.3. Works without authentication;
-  an optional API key raises the daily request quota from 300 to
-  10 000.
+  Stack Overflow questions, answers, search results, users, and tags via the
+  public Stack Exchange REST API v2.3. Works anonymously without authentication.
 base_url: https://api.stackexchange.com/2.3
 
 inputs:
-  STACKOVERFLOW_API_KEY:
-    kind: secret
-    hint: >-
-      Optional Stack Exchange API key for a higher request quota.
-      Register an app at https://stackapps.com/apps/oauth/register
-      to obtain one. Leave empty for anonymous access (300
-      requests/day).
   STACKOVERFLOW_SITE:
     kind: variable
     default: stackoverflow
@@ -32,13 +23,16 @@ test_queries:
     FROM stackoverflow.questions LIMIT 1
   - >-
     SELECT question_id, title, score
-    FROM stackoverflow.search_questions('python') LIMIT 1
+    FROM stackoverflow.search_questions(intitle => 'python') LIMIT 1
   - >-
     SELECT answer_id, score, is_accepted
     FROM stackoverflow.answers LIMIT 1
   - >-
     SELECT name, count
     FROM stackoverflow.tags LIMIT 1
+  - >-
+    SELECT user_id, display_name, reputation
+    FROM stackoverflow.users LIMIT 1
 
 tables:
   - name: questions
@@ -64,9 +58,6 @@ tables:
         - name: site
           from: input
           key: STACKOVERFLOW_SITE
-        - name: key
-          from: input
-          key: STACKOVERFLOW_API_KEY
         - name: order
           from: literal
           value: desc
@@ -83,6 +74,7 @@ tables:
       mode: page
       page_param: page
       page_start: 1
+      max_pages: 25
       page_size:
         default: 30
         max: 100
@@ -272,7 +264,7 @@ tables:
         expr:
           kind: from_filter
           key: tagged
-      - name: sort_filter
+      - name: sort
         type: Utf8
         nullable: true
         virtual: true
@@ -299,9 +291,6 @@ tables:
         - name: site
           from: input
           key: STACKOVERFLOW_SITE
-        - name: key
-          from: input
-          key: STACKOVERFLOW_API_KEY
         - name: order
           from: literal
           value: desc
@@ -315,6 +304,7 @@ tables:
       mode: page
       page_param: page
       page_start: 1
+      max_pages: 25
       page_size:
         default: 30
         max: 100
@@ -448,9 +438,6 @@ tables:
         - name: site
           from: input
           key: STACKOVERFLOW_SITE
-        - name: key
-          from: input
-          key: STACKOVERFLOW_API_KEY
         - name: order
           from: literal
           value: desc
@@ -464,6 +451,7 @@ tables:
       mode: page
       page_param: page
       page_start: 1
+      max_pages: 25
       page_size:
         default: 30
         max: 100
@@ -512,6 +500,179 @@ tables:
           path:
             - is_required
 
+  - name: users
+    description: >
+      Lists users on the configured Stack Exchange site sorted by reputation.
+      Each row includes user ID, display name, reputation, location, website
+      URL, profile link, and reputation changes. Coral handles page-based
+      pagination automatically.
+    guide: >
+      Start with `SELECT user_id, display_name, reputation, location
+      FROM stackoverflow.users LIMIT 10` to find the users with the highest
+      reputation. To search for a specific user, use the `inname` filter:
+      `WHERE inname = 'Jon Skeet'`.
+    fetch_limit_default: 100
+    filters:
+      - name: inname
+    request:
+      method: GET
+      path: /users
+      query:
+        - name: site
+          from: input
+          key: STACKOVERFLOW_SITE
+        - name: order
+          from: literal
+          value: desc
+        - name: sort
+          from: literal
+          value: reputation
+        - name: inname
+          from: filter
+          key: inname
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: page
+      page_param: page
+      page_start: 1
+      max_pages: 25
+      page_size:
+        default: 30
+        max: 100
+        query_param: pagesize
+    columns:
+      - name: user_id
+        type: Int64
+        nullable: false
+        description: Unique user identifier.
+        expr:
+          kind: path
+          path:
+            - user_id
+      - name: display_name
+        type: Utf8
+        nullable: true
+        description: Display name of the user.
+        expr:
+          kind: path
+          path:
+            - display_name
+      - name: reputation
+        type: Int64
+        nullable: true
+        description: Reputation score.
+        expr:
+          kind: path
+          path:
+            - reputation
+      - name: user_type
+        type: Utf8
+        nullable: true
+        description: Type of user (e.g. registered, moderator).
+        expr:
+          kind: path
+          path:
+            - user_type
+      - name: location
+        type: Utf8
+        nullable: true
+        description: Location of the user.
+        expr:
+          kind: path
+          path:
+            - location
+      - name: website_url
+        type: Utf8
+        nullable: true
+        description: Link to website, if any.
+        expr:
+          kind: path
+          path:
+            - website_url
+      - name: link
+        type: Utf8
+        nullable: true
+        description: Profile link to Stack Overflow.
+        expr:
+          kind: path
+          path:
+            - link
+      - name: profile_image
+        type: Utf8
+        nullable: true
+        description: Link to profile image.
+        expr:
+          kind: path
+          path:
+            - profile_image
+      - name: creation_date
+        type: Timestamp
+        nullable: true
+        description: When the user registered.
+        expr:
+          kind: format_timestamp
+          input: seconds
+          expr:
+            kind: path
+            path:
+              - creation_date
+      - name: reputation_change_year
+        type: Int64
+        nullable: true
+        description: Reputation change in the current year.
+        expr:
+          kind: path
+          path:
+            - reputation_change_year
+      - name: reputation_change_quarter
+        type: Int64
+        nullable: true
+        description: Reputation change in the current quarter.
+        expr:
+          kind: path
+          path:
+            - reputation_change_quarter
+      - name: reputation_change_month
+        type: Int64
+        nullable: true
+        description: Reputation change in the current month.
+        expr:
+          kind: path
+          path:
+            - reputation_change_month
+      - name: reputation_change_week
+        type: Int64
+        nullable: true
+        description: Reputation change in the current week.
+        expr:
+          kind: path
+          path:
+            - reputation_change_week
+      - name: reputation_change_day
+        type: Int64
+        nullable: true
+        description: Reputation change in the current day.
+        expr:
+          kind: path
+          path:
+            - reputation_change_day
+      - name: inname
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by username (exact or partial matching).
+        expr:
+          kind: from_filter
+          key: inname
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw user object from the Stack Exchange API.
+        expr:
+          kind: current_row
+
 functions:
   - name: search_questions
     kind: search
@@ -525,7 +686,7 @@ functions:
     fetch_limit_default: 100
     search_limits:
       default_top_k: 10
-      max_top_k: 250
+      max_top_k: 100
       max_calls_per_query: 1
     args:
       - name: intitle
@@ -545,9 +706,6 @@ functions:
         - name: site
           from: input
           key: STACKOVERFLOW_SITE
-        - name: key
-          from: input
-          key: STACKOVERFLOW_API_KEY
         - name: order
           from: literal
           value: desc
@@ -567,6 +725,7 @@ functions:
       mode: page
       page_param: page
       page_start: 1
+      max_pages: 25
       page_size:
         default: 30
         max: 100

@@ -2,13 +2,12 @@
 
 **Version:** 0.1.0
 **Backend:** HTTP
-**Tables:** 4
+**Tables:** 5
 **Base URL:** `https://api.stackexchange.com/2.3`
 
-Query Stack Overflow questions, answers, search results, and tags via the
+Query Stack Overflow questions, answers, search results, users, and tags via the
 public [Stack Exchange API v2.3](https://api.stackexchange.com/docs). Works
-without authentication. An optional API key raises the daily request quota
-from 300 to 10 000.
+without authentication.
 
 ```bash
 coral source add --file sources/community/stackoverflow/manifest.yaml
@@ -18,12 +17,9 @@ coral source add --file sources/community/stackoverflow/manifest.yaml
 
 | Input                     | Kind       | Required | Default         | Description                                                  |
 | ------------------------- | ---------- | -------- | --------------- | ------------------------------------------------------------ |
-| `STACKOVERFLOW_API_KEY`   | secret     | no       | *(empty)*       | Stack Exchange API key for higher quota                      |
 | `STACKOVERFLOW_SITE`      | variable   | no       | `stackoverflow` | Site to query (`serverfault`, `askubuntu`, `superuser`, etc.) |
 
-To obtain an API key, register an application at
-<https://stackapps.com/apps/oauth/register>. Authentication is not required
-for read-only access — the key only increases your daily request quota.
+Authentication is not required for read-only access.
 
 ## Tables
 
@@ -32,6 +28,7 @@ for read-only access — the key only increases your daily request quota.
 | `stackoverflow.questions`         | Browse questions by activity, votes, or tags   | `tagged`, `sort`          |
 | `stackoverflow.search_questions()`| Search questions by title keyword (function)   | `intitle` (**required**)  |
 | `stackoverflow.answers`           | Recent answers with score and acceptance status | —                         |
+| `stackoverflow.users`             | Stack Overflow users sorted by reputation      | `inname`                  |
 | `stackoverflow.tags`              | Tags sorted by popularity with question counts | —                         |
 
 ## Example queries
@@ -56,17 +53,22 @@ LIMIT 10;
 
 -- Search questions by title keyword (search function)
 SELECT question_id, title, score, view_count
-FROM stackoverflow.search_questions('async await')
+FROM stackoverflow.search_questions(intitle => 'async await')
 LIMIT 10;
 
 -- Search with tag and sort arguments
 SELECT question_id, title, score
-FROM stackoverflow.search_questions('dependency injection', tagged => 'java', sort => 'votes')
+FROM stackoverflow.search_questions(intitle => 'dependency injection', tagged => 'java', sort => 'votes')
 LIMIT 10;
 
 -- Recent answers
 SELECT answer_id, question_id, score, is_accepted, creation_date
 FROM stackoverflow.answers
+LIMIT 10;
+
+-- Top users by reputation
+SELECT user_id, display_name, reputation, location
+FROM stackoverflow.users
 LIMIT 10;
 
 -- Most popular tags
@@ -85,8 +87,7 @@ how many rows you want. Without an explicit `LIMIT`, results are capped at
 ## Notes
 
 - **No authentication required.** Anonymous access provides 300 API
-  requests per day per IP. Adding an API key raises this to 10 000
-  per day.
+  requests per day per IP.
 - **Read-only.** This source does not support write operations.
 - **HTML-encoded titles.** Question titles may contain HTML entities
   (e.g. `&amp;`, `&#39;`). Use them as-is or decode in your application.
@@ -100,11 +101,7 @@ how many rows you want. Without an explicit `LIMIT`, results are capped at
   `math`, `unix`, etc.
 - **Timestamps.** All date columns are converted from Unix epoch
   seconds to UTC timestamps.
-- **Pagination and quota limits.** Without an API key, the API limits
-  pagination to page 25 (750 rows at pagesize 30) and allows 300
-  requests/day. The API may return a `backoff` field requiring you to
-  wait before the next request. Coral respects `has_more` to stop
-  paginating. Always use `LIMIT` to stay within quota.
+- **Pagination and quota limits.** The API limits anonymous pagination to page 25 (750 rows at pagesize 30) and allows 300 requests/day per IP. Coral caps pagination at 25 pages to prevent exceeding this limit. Always use `LIMIT` to stay within quota.
 
 ## Validation
 
@@ -121,7 +118,7 @@ coral sql "SELECT question_id, title, score FROM stackoverflow.questions LIMIT 1
 # | 79946255    | How to enable &quot;Annotate with Git Blame&quot; using WebStorm 2026.1? | 0     |
 # +-------------+--------------------------------------------------------------------------+-------+
 
-coral sql "SELECT question_id, title, score FROM stackoverflow.search_questions('python') LIMIT 1"
+coral sql "SELECT question_id, title, score FROM stackoverflow.search_questions(intitle => 'python') LIMIT 1"
 # +-------------+-----------------------------------------------+-------+
 # | question_id | title                                         | score |
 # +-------------+-----------------------------------------------+-------+
@@ -134,6 +131,13 @@ coral sql "SELECT answer_id, score, is_accepted FROM stackoverflow.answers LIMIT
 # +-----------+-------+-------------+
 # | 53381692  | 76    | false       |
 # +-----------+-------+-------------+
+
+coral sql "SELECT user_id, display_name, reputation FROM stackoverflow.users LIMIT 1"
+# +---------+--------------+------------+
+# | user_id | display_name | reputation |
+# +---------+--------------+------------+
+# | 22656   | Jon Skeet    | 1527510    |
+# +---------+--------------+------------+
 
 coral sql "SELECT name, count FROM stackoverflow.tags LIMIT 1"
 # +------------+---------+
