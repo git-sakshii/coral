@@ -1,0 +1,1274 @@
+name: youtube
+version: 0.1.0
+dsl_version: 3
+backend: http
+description: >-
+  Query YouTube video metadata, channel info, playlist contents, and search
+  results via the YouTube Data API v3.
+inputs:
+  YOUTUBE_API_BASE:
+    kind: variable
+    default: https://www.googleapis.com/youtube/v3
+    hint: |
+      Base URL for the YouTube Data API v3. Keep the default unless you are
+      testing against a mock server.
+  YOUTUBE_API_KEY:
+    kind: secret
+    hint: |
+      A YouTube Data API v3 API key. Create one in the Google Cloud Console:
+      1. Open https://console.cloud.google.com/
+      2. Enable the "YouTube Data API v3" under APIs & Services.
+      3. Go to Credentials → Create Credentials → API Key.
+      The free tier gives 10 000 quota units per day.
+base_url: "{{input.YOUTUBE_API_BASE}}"
+request_headers:
+  - name: Accept
+    from: literal
+    value: application/json
+test_queries:
+  - SELECT id, title, channel_title FROM youtube.videos WHERE id = 'dQw4w9WgXcQ' LIMIT 1
+  - SELECT id, title FROM youtube.search WHERE q = 'coral sql' LIMIT 3
+  - SELECT id, title FROM youtube.channels WHERE id = 'UC_x5XG1OV2P6uZZ5FSM9Ttw' LIMIT 1
+tables:
+  # ── videos ──────────────────────────────────────────────────────
+  - name: videos
+    description: YouTube video metadata, statistics, and content details
+    guide: |
+      Retrieve details for one or more videos.
+      You must provide at least one of the following filters:
+        • `id`         — comma-separated video IDs
+        • `chart`      — return videos for a chart (e.g. "mostPopular")
+      When using `chart`, you may optionally filter by `region_code`.
+    filters:
+      - name: id
+        required: false
+        description: Comma-separated list of YouTube video IDs.
+      - name: chart
+        required: false
+        description: Return videos for the specified chart (e.g. "mostPopular").
+      - name: region_code
+        required: false
+        description: ISO 3166-1 alpha-2 country code to filter chart results.
+    request:
+      method: GET
+      path: /videos
+      query:
+        - name: key
+          from: input
+          key: YOUTUBE_API_KEY
+        - name: part
+          from: literal
+          value: snippet,statistics,contentDetails
+        - name: id
+          from: filter
+          key: id
+        - name: chart
+          from: filter
+          key: chart
+        - name: regionCode
+          from: filter
+          key: region_code
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: cursor_query
+      cursor_param: pageToken
+      response_cursor_path:
+        - nextPageToken
+      page_size:
+        default: 50
+        max: 50
+        query_param: maxResults
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: The unique video ID
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Title of the video
+        expr:
+          kind: path
+          path:
+            - snippet
+            - title
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Description of the video
+        expr:
+          kind: path
+          path:
+            - snippet
+            - description
+      - name: channel_id
+        type: Utf8
+        nullable: true
+        description: ID of the channel that published the video
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelId
+      - name: channel_title
+        type: Utf8
+        nullable: true
+        description: Title of the channel that published the video
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelTitle
+      - name: published_at
+        type: Timestamp
+        nullable: true
+        description: Date and time the video was published
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - snippet
+              - publishedAt
+      - name: tags
+        type: Json
+        nullable: true
+        description: List of keyword tags associated with the video
+        expr:
+          kind: path
+          path:
+            - snippet
+            - tags
+      - name: category_id
+        type: Utf8
+        nullable: true
+        description: YouTube video category ID
+        expr:
+          kind: path
+          path:
+            - snippet
+            - categoryId
+      - name: live_broadcast_content
+        type: Utf8
+        nullable: true
+        description: Whether the video is live (live, upcoming, or none)
+        expr:
+          kind: path
+          path:
+            - snippet
+            - liveBroadcastContent
+      - name: default_language
+        type: Utf8
+        nullable: true
+        description: Default language of the video's text
+        expr:
+          kind: path
+          path:
+            - snippet
+            - defaultLanguage
+      - name: duration
+        type: Utf8
+        nullable: true
+        description: ISO 8601 duration of the video (e.g. PT4M13S)
+        expr:
+          kind: path
+          path:
+            - contentDetails
+            - duration
+      - name: definition
+        type: Utf8
+        nullable: true
+        description: Whether the video is available in HD or SD
+        expr:
+          kind: path
+          path:
+            - contentDetails
+            - definition
+      - name: caption
+        type: Utf8
+        nullable: true
+        description: Whether captions are available (true/false)
+        expr:
+          kind: path
+          path:
+            - contentDetails
+            - caption
+      - name: licensed_content
+        type: Boolean
+        nullable: true
+        description: Whether the video represents licensed content
+        expr:
+          kind: path
+          path:
+            - contentDetails
+            - licensedContent
+      - name: view_count
+        type: Utf8
+        nullable: true
+        description: Number of times the video has been viewed
+        expr:
+          kind: path
+          path:
+            - statistics
+            - viewCount
+      - name: like_count
+        type: Utf8
+        nullable: true
+        description: Number of likes on the video
+        expr:
+          kind: path
+          path:
+            - statistics
+            - likeCount
+      - name: comment_count
+        type: Utf8
+        nullable: true
+        description: Number of comments on the video
+        expr:
+          kind: path
+          path:
+            - statistics
+            - commentCount
+      - name: thumbnail_url
+        type: Utf8
+        nullable: true
+        description: URL of the default thumbnail image
+        expr:
+          kind: path
+          path:
+            - snippet
+            - thumbnails
+            - default
+            - url
+      - name: id_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by video ID(s).
+        expr:
+          kind: from_filter
+          key: id
+      - name: chart_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by chart name.
+        expr:
+          kind: from_filter
+          key: chart
+      - name: region_code_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by region code.
+        expr:
+          kind: from_filter
+          key: region_code
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw video object from the YouTube Data API
+        expr:
+          kind: current_row
+
+  # ── channels ────────────────────────────────────────────────────
+  - name: channels
+    description: YouTube channel metadata and statistics
+    guide: |
+      Retrieve details for one or more channels.
+      You must provide at least one of the following filters:
+        • `id`            — comma-separated channel IDs
+        • `for_handle`    — a YouTube handle (e.g. "@Google")
+    filters:
+      - name: id
+        required: false
+        description: Comma-separated list of YouTube channel IDs.
+      - name: for_handle
+        required: false
+        description: A YouTube handle (e.g. "@Google").
+    request:
+      method: GET
+      path: /channels
+      query:
+        - name: key
+          from: input
+          key: YOUTUBE_API_KEY
+        - name: part
+          from: literal
+          value: snippet,statistics,contentDetails
+        - name: id
+          from: filter
+          key: id
+        - name: forHandle
+          from: filter
+          key: for_handle
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: cursor_query
+      cursor_param: pageToken
+      response_cursor_path:
+        - nextPageToken
+      page_size:
+        default: 50
+        max: 50
+        query_param: maxResults
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: The unique channel ID
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Title of the channel
+        expr:
+          kind: path
+          path:
+            - snippet
+            - title
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Channel description
+        expr:
+          kind: path
+          path:
+            - snippet
+            - description
+      - name: custom_url
+        type: Utf8
+        nullable: true
+        description: Custom URL/handle for the channel
+        expr:
+          kind: path
+          path:
+            - snippet
+            - customUrl
+      - name: published_at
+        type: Timestamp
+        nullable: true
+        description: Date and time the channel was created
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - snippet
+              - publishedAt
+      - name: country
+        type: Utf8
+        nullable: true
+        description: Country with which the channel is associated
+        expr:
+          kind: path
+          path:
+            - snippet
+            - country
+      - name: uploads_playlist_id
+        type: Utf8
+        nullable: true
+        description: ID of the playlist containing all uploaded videos
+        expr:
+          kind: path
+          path:
+            - contentDetails
+            - relatedPlaylists
+            - uploads
+      - name: view_count
+        type: Utf8
+        nullable: true
+        description: Total number of views for all videos
+        expr:
+          kind: path
+          path:
+            - statistics
+            - viewCount
+      - name: subscriber_count
+        type: Utf8
+        nullable: true
+        description: Number of subscribers (may be rounded)
+        expr:
+          kind: path
+          path:
+            - statistics
+            - subscriberCount
+      - name: video_count
+        type: Utf8
+        nullable: true
+        description: Total number of public videos on the channel
+        expr:
+          kind: path
+          path:
+            - statistics
+            - videoCount
+      - name: thumbnail_url
+        type: Utf8
+        nullable: true
+        description: URL of the default channel thumbnail
+        expr:
+          kind: path
+          path:
+            - snippet
+            - thumbnails
+            - default
+            - url
+      - name: id_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by channel ID(s).
+        expr:
+          kind: from_filter
+          key: id
+      - name: for_handle
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by YouTube handle.
+        expr:
+          kind: from_filter
+          key: for_handle
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw channel object from the YouTube Data API
+        expr:
+          kind: current_row
+
+  # ── playlists ───────────────────────────────────────────────────
+  - name: playlists
+    description: YouTube playlists owned by a channel
+    guide: |
+      Retrieve playlists.
+      You must provide at least one of the following filters:
+        • `id`          — comma-separated playlist IDs
+        • `channel_id`  — list playlists for a channel
+    filters:
+      - name: id
+        required: false
+        description: Comma-separated list of playlist IDs.
+      - name: channel_id
+        required: false
+        description: Return playlists owned by this channel ID.
+    request:
+      method: GET
+      path: /playlists
+      query:
+        - name: key
+          from: input
+          key: YOUTUBE_API_KEY
+        - name: part
+          from: literal
+          value: snippet,contentDetails
+        - name: id
+          from: filter
+          key: id
+        - name: channelId
+          from: filter
+          key: channel_id
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: cursor_query
+      cursor_param: pageToken
+      response_cursor_path:
+        - nextPageToken
+      page_size:
+        default: 50
+        max: 50
+        query_param: maxResults
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: The unique playlist ID
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Title of the playlist
+        expr:
+          kind: path
+          path:
+            - snippet
+            - title
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Description of the playlist
+        expr:
+          kind: path
+          path:
+            - snippet
+            - description
+      - name: channel_id
+        type: Utf8
+        nullable: true
+        description: ID of the channel that owns the playlist
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelId
+      - name: channel_title
+        type: Utf8
+        nullable: true
+        description: Title of the channel that owns the playlist
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelTitle
+      - name: published_at
+        type: Timestamp
+        nullable: true
+        description: Date the playlist was created
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - snippet
+              - publishedAt
+      - name: item_count
+        type: Int64
+        nullable: true
+        description: Number of items in the playlist
+        expr:
+          kind: path
+          path:
+            - contentDetails
+            - itemCount
+      - name: thumbnail_url
+        type: Utf8
+        nullable: true
+        description: URL of the default playlist thumbnail
+        expr:
+          kind: path
+          path:
+            - snippet
+            - thumbnails
+            - default
+            - url
+      - name: id_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by playlist ID(s).
+        expr:
+          kind: from_filter
+          key: id
+      - name: channel_id_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by channel ID.
+        expr:
+          kind: from_filter
+          key: channel_id
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw playlist object from the YouTube Data API
+        expr:
+          kind: current_row
+
+  # ── playlist_items ──────────────────────────────────────────────
+  - name: playlist_items
+    description: Items (videos) inside a specific YouTube playlist
+    guide: |
+      Lists items in a playlist. Requires `playlist_id` filter.
+      Use a channel's `uploads_playlist_id` from the channels table to
+      list all videos uploaded by that channel.
+    filters:
+      - name: playlist_id
+        required: true
+        description: The ID of the playlist to retrieve items from.
+      - name: video_id
+        required: false
+        description: Filter to a specific video within the playlist.
+    request:
+      method: GET
+      path: /playlistItems
+      query:
+        - name: key
+          from: input
+          key: YOUTUBE_API_KEY
+        - name: part
+          from: literal
+          value: snippet,contentDetails
+        - name: playlistId
+          from: filter
+          key: playlist_id
+        - name: videoId
+          from: filter
+          key: video_id
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: cursor_query
+      cursor_param: pageToken
+      response_cursor_path:
+        - nextPageToken
+      page_size:
+        default: 50
+        max: 50
+        query_param: maxResults
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: Unique playlist item ID
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Title of the video
+        expr:
+          kind: path
+          path:
+            - snippet
+            - title
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Description of the video
+        expr:
+          kind: path
+          path:
+            - snippet
+            - description
+      - name: video_id
+        type: Utf8
+        nullable: true
+        description: ID of the video in this playlist item
+        expr:
+          kind: path
+          path:
+            - contentDetails
+            - videoId
+      - name: channel_id
+        type: Utf8
+        nullable: true
+        description: Channel ID of the video owner
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelId
+      - name: channel_title
+        type: Utf8
+        nullable: true
+        description: Channel title of the video owner
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelTitle
+      - name: playlist_id
+        type: Utf8
+        nullable: true
+        description: ID of the playlist containing this item
+        expr:
+          kind: path
+          path:
+            - snippet
+            - playlistId
+      - name: position
+        type: Int64
+        nullable: true
+        description: Zero-based position of the item in the playlist
+        expr:
+          kind: path
+          path:
+            - snippet
+            - position
+      - name: published_at
+        type: Timestamp
+        nullable: true
+        description: Date the item was added to the playlist
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - snippet
+              - publishedAt
+      - name: video_published_at
+        type: Timestamp
+        nullable: true
+        description: Date the video was originally published
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - contentDetails
+              - videoPublishedAt
+      - name: thumbnail_url
+        type: Utf8
+        nullable: true
+        description: URL of the default thumbnail image
+        expr:
+          kind: path
+          path:
+            - snippet
+            - thumbnails
+            - default
+            - url
+      - name: playlist_id_filter
+        type: Utf8
+        nullable: false
+        virtual: true
+        description: Filter by playlist ID.
+        expr:
+          kind: from_filter
+          key: playlist_id
+      - name: video_id_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter to a specific video in the playlist.
+        expr:
+          kind: from_filter
+          key: video_id
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw playlist item object from the YouTube Data API
+        expr:
+          kind: current_row
+
+  # ── search ──────────────────────────────────────────────────────
+  - name: search
+    description: Search YouTube for videos, channels, or playlists
+    guide: |
+      Search YouTube content. Requires `q` (search query) filter.
+      You can optionally filter by `type` (video, channel, playlist),
+      `channel_id`, `order`, `published_after`, `published_before`,
+      and `region_code`.
+
+      Note: Each search request costs 100 quota units (vs 1 unit for
+      other endpoints). Use sparingly to conserve your daily quota.
+    filters:
+      - name: q
+        required: true
+        description: Search query string.
+      - name: type
+        required: false
+        description: >-
+          Restrict to a resource type: video, channel, or playlist.
+          Comma-separate for multiple types.
+      - name: channel_id
+        required: false
+        description: Restrict results to a specific channel.
+      - name: order
+        required: false
+        description: >-
+          Sort order: date, rating, relevance (default), title, videoCount, viewCount.
+      - name: published_after
+        required: false
+        description: Only return results created after this RFC 3339 timestamp.
+      - name: published_before
+        required: false
+        description: Only return results created before this RFC 3339 timestamp.
+      - name: region_code
+        required: false
+        description: ISO 3166-1 alpha-2 country code for regional results.
+      - name: video_duration
+        required: false
+        description: >-
+          Filter by duration: any (default), long (>20 min), medium (4-20 min), short (<4 min).
+          Only applies when type=video.
+    request:
+      method: GET
+      path: /search
+      query:
+        - name: key
+          from: input
+          key: YOUTUBE_API_KEY
+        - name: part
+          from: literal
+          value: snippet
+        - name: q
+          from: filter
+          key: q
+        - name: type
+          from: filter
+          key: type
+        - name: channelId
+          from: filter
+          key: channel_id
+        - name: order
+          from: filter
+          key: order
+        - name: publishedAfter
+          from: filter
+          key: published_after
+        - name: publishedBefore
+          from: filter
+          key: published_before
+        - name: regionCode
+          from: filter
+          key: region_code
+        - name: videoDuration
+          from: filter
+          key: video_duration
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: cursor_query
+      cursor_param: pageToken
+      response_cursor_path:
+        - nextPageToken
+      page_size:
+        default: 25
+        max: 50
+        query_param: maxResults
+    columns:
+      - name: id
+        type: Utf8
+        nullable: true
+        description: >-
+          The resource ID (video ID, channel ID, or playlist ID depending on kind)
+        expr:
+          kind: coalesce
+          exprs:
+            - kind: path
+              path:
+                - id
+                - videoId
+            - kind: path
+              path:
+                - id
+                - channelId
+            - kind: path
+              path:
+                - id
+                - playlistId
+      - name: kind
+        type: Utf8
+        nullable: true
+        description: >-
+          The kind of resource (youtube#video, youtube#channel, youtube#playlist)
+        expr:
+          kind: path
+          path:
+            - id
+            - kind
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Title of the search result
+        expr:
+          kind: path
+          path:
+            - snippet
+            - title
+      - name: description
+        type: Utf8
+        nullable: true
+        description: Description of the search result
+        expr:
+          kind: path
+          path:
+            - snippet
+            - description
+      - name: channel_id
+        type: Utf8
+        nullable: true
+        description: Channel ID that owns the result
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelId
+      - name: channel_title
+        type: Utf8
+        nullable: true
+        description: Channel title that owns the result
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelTitle
+      - name: published_at
+        type: Timestamp
+        nullable: true
+        description: Date and time the resource was published
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - snippet
+              - publishedAt
+      - name: thumbnail_url
+        type: Utf8
+        nullable: true
+        description: URL of the default thumbnail image
+        expr:
+          kind: path
+          path:
+            - snippet
+            - thumbnails
+            - default
+            - url
+      - name: live_broadcast_content
+        type: Utf8
+        nullable: true
+        description: Whether the resource is live (live, upcoming, or none)
+        expr:
+          kind: path
+          path:
+            - snippet
+            - liveBroadcastContent
+      - name: q
+        type: Utf8
+        nullable: false
+        virtual: true
+        description: Search query string.
+        expr:
+          kind: from_filter
+          key: q
+      - name: type
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by resource type (video, channel, playlist).
+        expr:
+          kind: from_filter
+          key: type
+      - name: channel_id_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Restrict results to a specific channel.
+        expr:
+          kind: from_filter
+          key: channel_id
+      - name: order_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Sort order for results.
+        expr:
+          kind: from_filter
+          key: order
+      - name: published_after_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter results created after this timestamp.
+        expr:
+          kind: from_filter
+          key: published_after
+      - name: published_before_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter results created before this timestamp.
+        expr:
+          kind: from_filter
+          key: published_before
+      - name: region_code_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by region code.
+        expr:
+          kind: from_filter
+          key: region_code
+      - name: video_duration_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by video duration.
+        expr:
+          kind: from_filter
+          key: video_duration
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw search result object from the YouTube Data API
+        expr:
+          kind: current_row
+
+  # ── comment_threads ─────────────────────────────────────────────
+  - name: comment_threads
+    description: Top-level comment threads on a YouTube video
+    guide: |
+      Retrieve comment threads for a video.
+      Requires `video_id` filter.
+      You can optionally filter by `order` (time or relevance).
+    filters:
+      - name: video_id
+        required: true
+        description: The video ID to retrieve comments for.
+      - name: order
+        required: false
+        description: Sort order for comments (time or relevance). Defaults to time.
+    request:
+      method: GET
+      path: /commentThreads
+      query:
+        - name: key
+          from: input
+          key: YOUTUBE_API_KEY
+        - name: part
+          from: literal
+          value: snippet
+        - name: videoId
+          from: filter
+          key: video_id
+        - name: order
+          from: filter
+          key: order
+    response:
+      rows_path:
+        - items
+    pagination:
+      mode: cursor_query
+      cursor_param: pageToken
+      response_cursor_path:
+        - nextPageToken
+      page_size:
+        default: 20
+        max: 100
+        query_param: maxResults
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: The unique comment thread ID
+      - name: video_id
+        type: Utf8
+        nullable: true
+        description: ID of the video this comment thread belongs to
+        expr:
+          kind: path
+          path:
+            - snippet
+            - videoId
+      - name: author_display_name
+        type: Utf8
+        nullable: true
+        description: Display name of the comment author
+        expr:
+          kind: path
+          path:
+            - snippet
+            - topLevelComment
+            - snippet
+            - authorDisplayName
+      - name: author_channel_id
+        type: Utf8
+        nullable: true
+        description: Channel ID of the comment author
+        expr:
+          kind: path
+          path:
+            - snippet
+            - topLevelComment
+            - snippet
+            - authorChannelId
+            - value
+      - name: text_display
+        type: Utf8
+        nullable: true
+        description: The comment text (HTML formatted)
+        expr:
+          kind: path
+          path:
+            - snippet
+            - topLevelComment
+            - snippet
+            - textDisplay
+      - name: text_original
+        type: Utf8
+        nullable: true
+        description: The comment text (original plain text)
+        expr:
+          kind: path
+          path:
+            - snippet
+            - topLevelComment
+            - snippet
+            - textOriginal
+      - name: like_count
+        type: Int64
+        nullable: true
+        description: Number of likes on the top-level comment
+        expr:
+          kind: path
+          path:
+            - snippet
+            - topLevelComment
+            - snippet
+            - likeCount
+      - name: published_at
+        type: Timestamp
+        nullable: true
+        description: Date and time the comment was published
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - snippet
+              - topLevelComment
+              - snippet
+              - publishedAt
+      - name: updated_at
+        type: Timestamp
+        nullable: true
+        description: Date and time the comment was last updated
+        expr:
+          kind: format_timestamp
+          input: iso8601
+          expr:
+            kind: path
+            path:
+              - snippet
+              - topLevelComment
+              - snippet
+              - updatedAt
+      - name: total_reply_count
+        type: Int64
+        nullable: true
+        description: Number of replies to this comment thread
+        expr:
+          kind: path
+          path:
+            - snippet
+            - totalReplyCount
+      - name: is_public
+        type: Boolean
+        nullable: true
+        description: Whether the comment thread is public
+        expr:
+          kind: path
+          path:
+            - snippet
+            - isPublic
+      - name: video_id_filter
+        type: Utf8
+        nullable: false
+        virtual: true
+        description: Filter by video ID.
+        expr:
+          kind: from_filter
+          key: video_id
+      - name: order_filter
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Sort order for comments (time or relevance).
+        expr:
+          kind: from_filter
+          key: order
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw comment thread object from the YouTube Data API
+        expr:
+          kind: current_row
+
+  # ── video_categories ────────────────────────────────────────────
+  - name: video_categories
+    description: YouTube video category definitions
+    guide: |
+      Lists video categories available in a given region.
+      Provide `region_code` (defaults to US) or `id` to look up specific categories.
+    filters:
+      - name: region_code
+        required: false
+        description: ISO 3166-1 alpha-2 country code (default US).
+      - name: id
+        required: false
+        description: Comma-separated category IDs.
+    request:
+      method: GET
+      path: /videoCategories
+      query:
+        - name: key
+          from: input
+          key: YOUTUBE_API_KEY
+        - name: part
+          from: literal
+          value: snippet
+        - name: regionCode
+          from: filter
+          key: region_code
+        - name: id
+          from: filter
+          key: id
+    response:
+      rows_path:
+        - items
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: The video category ID
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Name of the video category
+        expr:
+          kind: path
+          path:
+            - snippet
+            - title
+      - name: channel_id
+        type: Utf8
+        nullable: true
+        description: Channel ID associated with this category
+        expr:
+          kind: path
+          path:
+            - snippet
+            - channelId
+      - name: assignable
+        type: Boolean
+        nullable: true
+        description: Whether videos can be assigned to this category
+        expr:
+          kind: path
+          path:
+            - snippet
+            - assignable
+      - name: region_code
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by region code.
+        expr:
+          kind: from_filter
+          key: region_code
+      - name: category_id
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter by category ID(s).
+        expr:
+          kind: from_filter
+          key: id
+      - name: raw
+        type: Json
+        nullable: false
+        description: Complete raw video category object from the YouTube Data API
+        expr:
+          kind: current_row
