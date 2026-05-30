@@ -6,7 +6,7 @@
 **Base URL:** `https://registry.npmjs.org`
 
 Query the [public npm registry REST API](https://github.com/npm/registry/blob/master/docs/REGISTRY-API.md)
-to search for packages, inspect metadata, and retrieve download statistics and quality scores.
+to search for packages and retrieve search-result summary data (such as latest version, publisher, downloads, and quality scores).
 
 ```bash
 coral source add --file sources/community/npm/manifest.yaml
@@ -66,7 +66,7 @@ avoid unbounded scans against the public registry.
 - **Search criteria.** The `text` filter searches package names, descriptions, and readmes. npm supports a number of [special search qualifiers](https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md#get-v1search) inside the `text` value — the list below is a selection of common ones; refer to the API docs for the full set:
   - `author:<name>` — packages published by a specific author
   - `maintainer:<name>` — packages with a specific maintainer
-  - `scope:<scope>` — scoped packages (e.g. `scope:babel`)
+  - `scope:<scope>` — scoped packages (e.g. `scope:@babel`)
   - `keywords:<kw>` — packages with a specific keyword
   - `not:unstable` — exclude pre-release versions
   - `not:insecure` / `is:insecure` — filter by security status

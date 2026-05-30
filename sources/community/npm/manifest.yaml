@@ -3,7 +3,7 @@ version: 0.1.0
 dsl_version: 3
 backend: http
 description: >-
-  Search the npm package registry and inspect package metadata via
+  Search the npm package registry and retrieve search-result summary data via
   the public npm registry REST API. No authentication required.
 base_url: https://registry.npmjs.org
 
@@ -106,11 +106,8 @@ tables:
       - name: date
         type: Timestamp
         nullable: true
-        description: >-
-          Publish date of the latest version.
-        # FIX (High): was kind: path which left this column always NULL.
-        # npm returns package.date as an ISO 8601 string; parse it with
-        # format_timestamp / iso8601 so the Timestamp type is usable.
+        description: Publish date of the latest version.
+        # Parse the ISO 8601 publish date from npm.
         expr:
           kind: format_timestamp
           input: iso8601
@@ -290,9 +287,6 @@ tables:
         expr:
           kind: from_filter
           key: text
-      # FIX (Low): was Utf8; the npm API contract and README both describe
-      # these as floats (0.0–1.0). Changed to Float64 so the catalog type
-      # matches the provider and numeric literals need no quoting in SQL.
       - name: popularity_weight
         type: Float64
         nullable: true
