@@ -185,7 +185,7 @@ tables:
         query:
           - name: filter
             from: template
-            template: openalex:{{filter.openalex_id}}
+            template: indexed_in:arxiv,openalex:{{filter.openalex_id}}
       - when_filters:
           - doi
         method: GET
@@ -193,7 +193,7 @@ tables:
         query:
           - name: filter
             from: template
-            template: doi:{{filter.doi}}
+            template: indexed_in:arxiv,doi:{{filter.doi}}
       - when_filters:
           - landing_page_url
         method: GET
@@ -201,7 +201,7 @@ tables:
         query:
           - name: filter
             from: template
-            template: locations.landing_page_url:{{filter.landing_page_url}}
+            template: indexed_in:arxiv,locations.landing_page_url:{{filter.landing_page_url}}
       - when_filters:
           - arxiv_id
         method: GET
@@ -209,7 +209,7 @@ tables:
         query:
           - name: filter
             from: template
-            template: locations.landing_page_url:http://arxiv.org/abs/{{filter.arxiv_id}}|https://arxiv.org/abs/{{filter.arxiv_id}}
+            template: indexed_in:arxiv,locations.landing_page_url:http://arxiv.org/abs/{{filter.arxiv_id}}|https://arxiv.org/abs/{{filter.arxiv_id}}
       - when_filters:
           - publication_year
         method: GET
