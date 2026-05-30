@@ -1,0 +1,354 @@
+name: arxiv
+version: 0.1.0
+dsl_version: 3
+backend: http
+description: >-
+  Search arXiv papers, preprints, and research metadata via the OpenAlex API.
+  No authentication required.
+base_url: https://api.openalex.org
+
+test_queries:
+  - SELECT title, publication_year, cited_by_count FROM arxiv.search(q => 'quantum computing') LIMIT 5
+  - SELECT title, publication_year, cited_by_count FROM arxiv.papers WHERE openalex_id = 'W2781738013' LIMIT 1
+  - SELECT title, publication_year, cited_by_count FROM arxiv.papers WHERE arxiv_id = '1706.03762' LIMIT 1
+  - SELECT title, publication_year, cited_by_count FROM arxiv.papers WHERE doi = 'https://doi.org/10.22331/q-2018-08-06-79' LIMIT 1
+
+functions:
+  - name: search
+    kind: search
+    description: |
+      Search arXiv papers and preprints by title, abstract, authors, or concepts.
+      Returns ranked results matching the search term.
+    fetch_limit_default: 25
+    search_limits:
+      default_top_k: 25
+      max_top_k: 200
+      max_calls_per_query: 5
+    args:
+      - name: q
+        required: true
+        bind:
+          arg: q
+    request:
+      method: GET
+      path: /works
+      query:
+        - name: filter
+          from: literal
+          value: indexed_in:arxiv
+        - name: search
+          from: arg
+          key: q
+    response:
+      rows_path:
+        - results
+    pagination:
+      mode: page
+      page_param: page
+      page_start: 1
+      page_step: 1
+      page_size:
+        default: 25
+        max: 200
+        query_param: per_page
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: OpenAlex URL ID (e.g. https://openalex.org/W2781738013).
+        expr:
+          kind: path
+          path: [id]
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Title of the paper.
+        expr:
+          kind: path
+          path: [title]
+      - name: doi
+        type: Utf8
+        nullable: true
+        description: Document Object Identifier (DOI) URL.
+        expr:
+          kind: path
+          path: [doi]
+      - name: publication_year
+        type: Int64
+        nullable: true
+        description: Publication year.
+        expr:
+          kind: path
+          path: [publication_year]
+      - name: publication_date
+        type: Utf8
+        nullable: true
+        description: Publication date (YYYY-MM-DD).
+        expr:
+          kind: path
+          path: [publication_date]
+      - name: type
+        type: Utf8
+        nullable: true
+        description: Work type (e.g. article, preprint).
+        expr:
+          kind: path
+          path: [type]
+      - name: language
+        type: Utf8
+        nullable: true
+        description: Primary language code (e.g. en).
+        expr:
+          kind: path
+          path: [language]
+      - name: cited_by_count
+        type: Int64
+        nullable: true
+        description: Number of citations received.
+        expr:
+          kind: path
+          path: [cited_by_count]
+      - name: landing_page_url
+        type: Utf8
+        nullable: true
+        description: Landing page URL of the preprint.
+        expr:
+          kind: path
+          path: [best_oa_location, landing_page_url]
+      - name: pdf_url
+        type: Utf8
+        nullable: true
+        description: PDF URL of the preprint.
+        expr:
+          kind: path
+          path: [best_oa_location, pdf_url]
+      - name: authorships
+        type: Json
+        nullable: true
+        description: JSON array containing authors and their affiliations.
+        expr:
+          kind: path
+          path: [authorships]
+      - name: topics
+        type: Json
+        nullable: true
+        description: JSON array of topics associated with the work.
+        expr:
+          kind: path
+          path: [topics]
+      - name: referenced_works
+        type: Json
+        nullable: true
+        description: JSON array of OpenAlex IDs referenced by this work.
+        expr:
+          kind: path
+          path: [referenced_works]
+      - name: related_works
+        type: Json
+        nullable: true
+        description: JSON array of related OpenAlex work IDs.
+        expr:
+          kind: path
+          path: [related_works]
+      - name: abstract_inverted_index
+        type: Json
+        nullable: true
+        description: Inverted index mapping words to positions in the abstract.
+        expr:
+          kind: path
+          path: [abstract_inverted_index]
+
+tables:
+  - name: papers
+    description: |
+      Query arXiv papers. You can list all papers or filter by specific identifiers
+      such as `openalex_id`, `doi`, `landing_page_url`, `arxiv_id`, or `publication_year`.
+    fetch_limit_default: 25
+    filters:
+      - name: openalex_id
+      - name: doi
+      - name: landing_page_url
+      - name: arxiv_id
+      - name: publication_year
+    request:
+      method: GET
+      path: /works
+      query:
+        - name: filter
+          from: literal
+          value: indexed_in:arxiv
+    requests:
+      - when_filters:
+          - openalex_id
+        method: GET
+        path: /works
+        query:
+          - name: filter
+            from: template
+            template: openalex:{{filter.openalex_id}}
+      - when_filters:
+          - doi
+        method: GET
+        path: /works
+        query:
+          - name: filter
+            from: template
+            template: doi:{{filter.doi}}
+      - when_filters:
+          - landing_page_url
+        method: GET
+        path: /works
+        query:
+          - name: filter
+            from: template
+            template: locations.landing_page_url:{{filter.landing_page_url}}
+      - when_filters:
+          - arxiv_id
+        method: GET
+        path: /works
+        query:
+          - name: filter
+            from: template
+            template: locations.landing_page_url:http://arxiv.org/abs/{{filter.arxiv_id}}|https://arxiv.org/abs/{{filter.arxiv_id}}
+      - when_filters:
+          - publication_year
+        method: GET
+        path: /works
+        query:
+          - name: filter
+            from: template
+            template: indexed_in:arxiv,publication_year:{{filter.publication_year}}
+    response:
+      rows_path:
+        - results
+    pagination:
+      mode: page
+      page_param: page
+      page_start: 1
+      page_step: 1
+      page_size:
+        default: 25
+        max: 200
+        query_param: per_page
+    columns:
+      - name: id
+        type: Utf8
+        nullable: false
+        description: OpenAlex URL ID (e.g. https://openalex.org/W2781738013).
+        expr:
+          kind: path
+          path: [id]
+      - name: openalex_id
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter column to query by OpenAlex ID.
+        expr:
+          kind: from_filter
+          key: openalex_id
+      - name: arxiv_id
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Filter column to query by arXiv ID.
+        expr:
+          kind: from_filter
+          key: arxiv_id
+      - name: title
+        type: Utf8
+        nullable: true
+        description: Title of the paper.
+        expr:
+          kind: path
+          path: [title]
+      - name: doi
+        type: Utf8
+        nullable: true
+        description: Document Object Identifier (DOI) URL.
+        expr:
+          kind: path
+          path: [doi]
+      - name: publication_year
+        type: Int64
+        nullable: true
+        description: Publication year.
+        expr:
+          kind: path
+          path: [publication_year]
+      - name: publication_date
+        type: Utf8
+        nullable: true
+        description: Publication date (YYYY-MM-DD).
+        expr:
+          kind: path
+          path: [publication_date]
+      - name: type
+        type: Utf8
+        nullable: true
+        description: Work type (e.g. article, preprint).
+        expr:
+          kind: path
+          path: [type]
+      - name: language
+        type: Utf8
+        nullable: true
+        description: Primary language code (e.g. en).
+        expr:
+          kind: path
+          path: [language]
+      - name: cited_by_count
+        type: Int64
+        nullable: true
+        description: Number of citations received.
+        expr:
+          kind: path
+          path: [cited_by_count]
+      - name: landing_page_url
+        type: Utf8
+        nullable: true
+        description: Landing page URL of the preprint.
+        expr:
+          kind: path
+          path: [best_oa_location, landing_page_url]
+      - name: pdf_url
+        type: Utf8
+        nullable: true
+        description: PDF URL of the preprint.
+        expr:
+          kind: path
+          path: [best_oa_location, pdf_url]
+      - name: authorships
+        type: Json
+        nullable: true
+        description: JSON array containing authors and their affiliations.
+        expr:
+          kind: path
+          path: [authorships]
+      - name: topics
+        type: Json
+        nullable: true
+        description: JSON array of topics associated with the work.
+        expr:
+          kind: path
+          path: [topics]
+      - name: referenced_works
+        type: Json
+        nullable: true
+        description: JSON array of OpenAlex IDs referenced by this work.
+        expr:
+          kind: path
+          path: [referenced_works]
+      - name: related_works
+        type: Json
+        nullable: true
+        description: JSON array of related OpenAlex work IDs.
+        expr:
+          kind: path
+          path: [related_works]
+      - name: abstract_inverted_index
+        type: Json
+        nullable: true
+        description: Inverted index mapping words to positions in the abstract.
+        expr:
+          kind: path
+          path: [abstract_inverted_index]
