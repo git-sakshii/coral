@@ -25,6 +25,22 @@ export YOUTUBE_API_KEY="<your-api-key>"
 coral source add --file sources/community/youtube/manifest.yaml
 ```
 
+## Functions
+
+### `youtube.search(q => '<query>')`
+
+Search YouTube for videos, channels, or playlists.
+
+* **Required Argument**: `q` (search query string)
+* **Optional Arguments**: `type` (video, channel, playlist), `channel_id`, `order`, `published_after`, `published_before`, `region_code`, `video_duration`.
+
+**Example:**
+```sql
+SELECT id, title, channel_title, published_at
+FROM youtube.search(q => 'rust programming', type => 'video', order => 'viewCount')
+LIMIT 10;
+```
+
 ## Tables
 
 | Table | Purpose | Required Filters |
@@ -33,7 +49,6 @@ coral source add --file sources/community/youtube/manifest.yaml
 | `youtube.channels` | Channel metadata and statistics | `id` or `for_handle` |
 | `youtube.playlists` | Playlist metadata for a channel | `id` or `channel_id` |
 | `youtube.playlist_items` | Videos inside a specific playlist | `playlist_id` |
-| `youtube.search` | Search YouTube for videos, channels, or playlists | `q` |
 | `youtube.comment_threads` | Top-level comments on a video | `video_id` |
 | `youtube.video_categories` | Video category definitions | None (defaults to US region) |
 
@@ -41,11 +56,11 @@ All tables are read-only. This source does not upload, modify, or delete any You
 
 ### Important Design Quirks
 
-* **Quota Costs**: The `search` table costs 100 quota units per request (vs 1 unit for `videos`, `channels`, etc.). Use it sparingly to stay within the 10,000 daily quota.
+* **Quota Costs**: The `search` function costs 100 quota units per request (vs 1 unit for `videos`, `channels`, etc.). Use it sparingly to stay within the 10,000 daily quota.
 * **Statistics as Strings**: The YouTube API returns view/like/comment counts as strings, not integers. Use `CAST(view_count AS BIGINT)` in SQL if you need numeric operations.
 * **Duration Format**: Video duration is returned as an ISO 8601 string (e.g. `PT4M13S` = 4 minutes 13 seconds), not as a number of seconds.
-* **Search Result IDs**: The `id` column in the search table contains the video/channel/playlist ID depending on the result `kind`. Use the `kind` column to distinguish between result types.
-* **Pagination Limits**: All tables support cursor-based pagination via `nextPageToken`. Maximum page size is 50 items for most endpoints and 100 for `comment_threads`.
+* **Search Result IDs**: The `id` column in the search function returns the video/channel/playlist ID depending on the result `kind`. Use the `kind` column to distinguish between result types.
+* **Pagination Limits**: All tables and functions support cursor-based pagination via `nextPageToken`. Maximum page size is 50 items for most endpoints and 100 for `comment_threads`.
 
 ## Example queries
 
@@ -69,10 +84,7 @@ Search for videos about a topic:
 
 ```sql
 SELECT id, title, channel_title, published_at
-FROM youtube.search
-WHERE q = 'rust programming'
-  AND type = 'video'
-  AND order = 'viewCount'
+FROM youtube.search(q => 'rust programming', type => 'video', order => 'viewCount')
 LIMIT 10;
 ```
 
