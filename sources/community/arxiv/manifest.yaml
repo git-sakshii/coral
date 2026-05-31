@@ -4,8 +4,16 @@ dsl_version: 3
 backend: http
 description: >-
   Search arXiv papers, preprints, and research metadata via the OpenAlex API.
-  No authentication required.
+  Requires a free OpenAlex API key.
 base_url: https://api.openalex.org
+
+inputs:
+  OPENALEX_API_KEY:
+    kind: secret
+    hint: >-
+      API key for OpenAlex. Get a free key at https://openalex.org/settings/api.
+      The key provides a free allowance and higher rate limits. The key is passed
+      as the api_key query parameter.
 
 test_queries:
   - SELECT title, publication_year, cited_by_count FROM arxiv.search(q => 'quantum computing') LIMIT 5
@@ -17,12 +25,12 @@ functions:
   - name: search
     kind: search
     description: |
-      Search arXiv papers and preprints by title, abstract, authors, or concepts.
+      Search arXiv papers and preprints by title, abstract, or full text.
       Returns ranked results matching the search term.
     fetch_limit_default: 25
     search_limits:
       default_top_k: 25
-      max_top_k: 200
+      max_top_k: 100
       max_calls_per_query: 5
     args:
       - name: q
@@ -39,6 +47,9 @@ functions:
         - name: search
           from: arg
           key: q
+        - name: api_key
+          from: input
+          key: OPENALEX_API_KEY
     response:
       rows_path:
         - results
@@ -49,7 +60,7 @@ functions:
       page_step: 1
       page_size:
         default: 25
-        max: 200
+        max: 100
         query_param: per_page
     columns:
       - name: id
@@ -108,20 +119,44 @@ functions:
         expr:
           kind: path
           path: [cited_by_count]
-      - name: landing_page_url
+      - name: arxiv_id
         type: Utf8
         nullable: true
-        description: Landing page URL of the preprint.
+        description: >-
+          The arXiv identifier of the work (e.g. 1706.03762). If null or not matching,
+          users can inspect the `locations` JSON column to retrieve the arXiv-specific identifier.
+        expr:
+          kind: replace
+          from: "https://arxiv.org/abs/"
+          to: ""
+          expr:
+            kind: replace
+            from: "http://arxiv.org/abs/"
+            to: ""
+            expr:
+              kind: path
+              path: [best_oa_location, landing_page_url]
+      - name: best_oa_landing_page_url
+        type: Utf8
+        nullable: true
+        description: Best open access landing page URL.
         expr:
           kind: path
           path: [best_oa_location, landing_page_url]
-      - name: pdf_url
+      - name: best_oa_pdf_url
         type: Utf8
         nullable: true
-        description: PDF URL of the preprint.
+        description: Best open access PDF URL.
         expr:
           kind: path
           path: [best_oa_location, pdf_url]
+      - name: locations
+        type: Json
+        nullable: true
+        description: JSON array of all locations (repositories, journals) hosting this work.
+        expr:
+          kind: path
+          path: [locations]
       - name: authorships
         type: Json
         nullable: true
@@ -177,6 +212,9 @@ tables:
         - name: filter
           from: literal
           value: indexed_in:arxiv
+        - name: api_key
+          from: input
+          key: OPENALEX_API_KEY
     requests:
       - when_filters:
           - openalex_id
@@ -186,6 +224,9 @@ tables:
           - name: filter
             from: template
             template: indexed_in:arxiv,openalex:{{filter.openalex_id}}
+          - name: api_key
+            from: input
+            key: OPENALEX_API_KEY
       - when_filters:
           - doi
         method: GET
@@ -194,6 +235,9 @@ tables:
           - name: filter
             from: template
             template: indexed_in:arxiv,doi:{{filter.doi}}
+          - name: api_key
+            from: input
+            key: OPENALEX_API_KEY
       - when_filters:
           - landing_page_url
         method: GET
@@ -202,6 +246,9 @@ tables:
           - name: filter
             from: template
             template: indexed_in:arxiv,locations.landing_page_url:{{filter.landing_page_url}}
+          - name: api_key
+            from: input
+            key: OPENALEX_API_KEY
       - when_filters:
           - arxiv_id
         method: GET
@@ -210,6 +257,9 @@ tables:
           - name: filter
             from: template
             template: indexed_in:arxiv,locations.landing_page_url:http://arxiv.org/abs/{{filter.arxiv_id}}|https://arxiv.org/abs/{{filter.arxiv_id}}
+          - name: api_key
+            from: input
+            key: OPENALEX_API_KEY
       - when_filters:
           - publication_year
         method: GET
@@ -218,6 +268,9 @@ tables:
           - name: filter
             from: template
             template: indexed_in:arxiv,publication_year:{{filter.publication_year}}
+          - name: api_key
+            from: input
+            key: OPENALEX_API_KEY
     response:
       rows_path:
         - results
@@ -226,9 +279,10 @@ tables:
       page_param: page
       page_start: 1
       page_step: 1
+      max_pages: 100
       page_size:
         default: 25
-        max: 200
+        max: 100
         query_param: per_page
     columns:
       - name: id
@@ -249,11 +303,20 @@ tables:
       - name: arxiv_id
         type: Utf8
         nullable: true
-        virtual: true
-        description: Filter column to query by arXiv ID.
+        description: >-
+          The arXiv identifier of the work (e.g. 1706.03762). If null or not matching,
+          users can inspect the `locations` JSON column to retrieve the arXiv-specific identifier.
         expr:
-          kind: from_filter
-          key: arxiv_id
+          kind: replace
+          from: "https://arxiv.org/abs/"
+          to: ""
+          expr:
+            kind: replace
+            from: "http://arxiv.org/abs/"
+            to: ""
+            expr:
+              kind: path
+              path: [best_oa_location, landing_page_url]
       - name: title
         type: Utf8
         nullable: true
@@ -303,20 +366,27 @@ tables:
         expr:
           kind: path
           path: [cited_by_count]
-      - name: landing_page_url
+      - name: best_oa_landing_page_url
         type: Utf8
         nullable: true
-        description: Landing page URL of the preprint.
+        description: Best open access landing page URL.
         expr:
           kind: path
           path: [best_oa_location, landing_page_url]
-      - name: pdf_url
+      - name: best_oa_pdf_url
         type: Utf8
         nullable: true
-        description: PDF URL of the preprint.
+        description: Best open access PDF URL.
         expr:
           kind: path
           path: [best_oa_location, pdf_url]
+      - name: locations
+        type: Json
+        nullable: true
+        description: JSON array of all locations (repositories, journals) hosting this work.
+        expr:
+          kind: path
+          path: [locations]
       - name: authorships
         type: Json
         nullable: true

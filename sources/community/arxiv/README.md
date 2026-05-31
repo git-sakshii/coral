@@ -6,11 +6,17 @@ Under the hood, this source queries the open-access [OpenAlex API](https://opena
 
 ## Rate Limits & Usage
 
-OpenAlex is free and open to the public without requiring an API key.
-- **Default limit:** 10 requests per second.
-- **Polite pool:** If you wish to identify your application and receive faster, prioritized rate limits (up to 100 requests per second), OpenAlex recommends adding a `mailto` parameter to requests. Since this community source uses a fully anonymous setup, you can optionally modify the manifest's `base_url` to append your email, e.g. `https://api.openalex.org?mailto=your-email@example.com`.
+OpenAlex is free and open to the public, but requires a free API key to get access to higher rate limits (up to 100 requests per second) and faster response times.
+- **Rate limit:** 100 requests per second with an API key.
+- Get a free key by visiting the [OpenAlex Settings Page](https://openalex.org/settings/api).
 
 ## Setup
+
+Configure the `OPENALEX_API_KEY` credential in your environment:
+
+```bash
+export OPENALEX_API_KEY="your_free_api_key"
+```
 
 Add the source directly using the CLI:
 
@@ -21,11 +27,11 @@ coral source add --file sources/community/arxiv/manifest.yaml
 ## Functions
 
 ### `search(q)`
-Perform a full-text search across arXiv preprint titles, abstracts, authors, and concepts. Requires the `q` argument.
+Perform a full-text search across arXiv preprint titles, abstracts, and full text. Requires the `q` argument.
 
 **Example:**
 ```sql
-SELECT title, publication_year, cited_by_count
+SELECT title, publication_year, cited_by_count, arxiv_id
 FROM arxiv.search(q => 'quantum computing')
 LIMIT 5;
 ```
@@ -40,16 +46,21 @@ Query papers indexed in arXiv. You can list all papers or filter by specific ide
 - `landing_page_url` (e.g. `'http://arxiv.org/abs/cond-mat/0410550'`)
 - `publication_year` (e.g. `2024`)
 
+#### Output Columns of Interest
+- `arxiv_id`: The raw arXiv identifier (e.g., `'1706.03762'`), extracted dynamically from the locations array.
+- `best_oa_landing_page_url` / `best_oa_pdf_url`: The best Open Access URLs for the paper (which may point to a publisher page or arXiv).
+- `locations`: JSON array of all hosted copies/repositories. Inspect this to find explicit arXiv links or other versions.
+
 **Examples:**
 ```sql
 -- Retrieve a specific paper by its arXiv ID
-SELECT title, publication_year, cited_by_count, pdf_url
+SELECT title, publication_year, cited_by_count, best_oa_pdf_url, arxiv_id
 FROM arxiv.papers
 WHERE arxiv_id = '1706.03762'
 LIMIT 1;
 
 -- List preprints from a specific publication year
-SELECT title, publication_date, cited_by_count
+SELECT title, publication_date, cited_by_count, best_oa_landing_page_url
 FROM arxiv.papers
 WHERE publication_year = 2025
 LIMIT 5;
