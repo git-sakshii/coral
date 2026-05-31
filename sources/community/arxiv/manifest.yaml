@@ -119,12 +119,13 @@ functions:
         expr:
           kind: path
           path: [cited_by_count]
-      - name: arxiv_id
+      - name: best_oa_arxiv_id
         type: Utf8
         nullable: true
         description: >-
-          The arXiv identifier of the work (e.g. 1706.03762). If null or not matching,
-          users can inspect the `locations` JSON column to retrieve the arXiv-specific identifier.
+          The arXiv identifier of the work derived from the best open access location (e.g. 1706.03762).
+          This may be null or contain a non-arXiv URL if the best open access location for a paper
+          is a publisher page, journal, or DOI link rather than arxiv.org.
         expr:
           kind: replace
           from: "https://arxiv.org/abs/"
@@ -303,9 +304,18 @@ tables:
       - name: arxiv_id
         type: Utf8
         nullable: true
+        virtual: true
+        description: Filter column to query by arXiv ID.
+        expr:
+          kind: from_filter
+          key: arxiv_id
+      - name: best_oa_arxiv_id
+        type: Utf8
+        nullable: true
         description: >-
-          The arXiv identifier of the work (e.g. 1706.03762). If null or not matching,
-          users can inspect the `locations` JSON column to retrieve the arXiv-specific identifier.
+          The arXiv identifier of the work derived from the best open access location (e.g. 1706.03762).
+          This may be null or contain a non-arXiv URL if the best open access location for a paper
+          is a publisher page, journal, or DOI link rather than arxiv.org.
         expr:
           kind: replace
           from: "https://arxiv.org/abs/"

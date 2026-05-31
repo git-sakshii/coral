@@ -31,7 +31,7 @@ Perform a full-text search across arXiv preprint titles, abstracts, and full tex
 
 **Example:**
 ```sql
-SELECT title, publication_year, cited_by_count, arxiv_id
+SELECT title, publication_year, cited_by_count, best_oa_arxiv_id
 FROM arxiv.search(q => 'quantum computing')
 LIMIT 5;
 ```
@@ -47,14 +47,14 @@ Query papers indexed in arXiv. You can list all papers or filter by specific ide
 - `publication_year` (e.g. `2024`)
 
 #### Output Columns of Interest
-- `arxiv_id`: The raw arXiv identifier (e.g., `'1706.03762'`), extracted dynamically from the locations array.
+- `best_oa_arxiv_id`: The arXiv identifier of the work derived from the best open access location (e.g. `'1706.03762'`). Note that `best_oa_arxiv_id` may be null or contain a non-arXiv URL if the best open access location for a paper is a publisher page, journal, or DOI link rather than arxiv.org.
 - `best_oa_landing_page_url` / `best_oa_pdf_url`: The best Open Access URLs for the paper (which may point to a publisher page or arXiv).
 - `locations`: JSON array of all hosted copies/repositories. Inspect this to find explicit arXiv links or other versions.
 
 **Examples:**
 ```sql
 -- Retrieve a specific paper by its arXiv ID
-SELECT title, publication_year, cited_by_count, best_oa_pdf_url, arxiv_id
+SELECT title, publication_year, cited_by_count, best_oa_pdf_url, best_oa_arxiv_id
 FROM arxiv.papers
 WHERE arxiv_id = '1706.03762'
 LIMIT 1;
