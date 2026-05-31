@@ -27,7 +27,7 @@ coral source add --file sources/community/maven_central/manifest.yaml
 | Table       | Description                                      | Required Filter                                              |
 |-------------|--------------------------------------------------|--------------------------------------------------------------|
 | `artifacts` | Search artifacts by keyword, one row per library | `WHERE q = '...'`                                            |
-| `versions`  | All published versions of a specific artifact    | `WHERE q = 'g:"groupId" AND a:"artifactId"'`                |
+| `versions`  | List published versions of a specific artifact   | `WHERE q = 'g:"groupId" AND a:"artifactId"'`                |
 
 ### Column reference
 
@@ -76,7 +76,7 @@ WHERE q = 'g:"org.springframework.boot" AND a:"spring-boot-starter"'
 ORDER BY timestamp DESC
 LIMIT 20;
 
--- Check all versions of a specific library
+-- Check versions of a specific library
 SELECT v, packaging, timestamp
 FROM maven_central.versions
 WHERE q = 'g:"com.google.guava" AND a:"guava"'
