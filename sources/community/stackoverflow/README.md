@@ -2,7 +2,8 @@
 
 **Version:** 0.1.0
 **Backend:** HTTP
-**Tables:** 5
+**Tables:** 4
+**Functions:** 1
 **Base URL:** `https://api.stackexchange.com/2.3`
 
 Query Stack Overflow questions, answers, search results, users, and tags via the
@@ -23,13 +24,13 @@ Authentication is not required for read-only access.
 
 ## Tables
 
-| Table / Function                  | Description                                    | Key filters / args        |
-| --------------------------------- | ---------------------------------------------- | ------------------------- |
-| `stackoverflow.questions`         | Browse questions by activity, votes, or tags   | `tagged`, `sort`          |
-| `stackoverflow.search_questions()`| Search questions by title keyword (function)   | `intitle` (**required**)  |
-| `stackoverflow.answers`           | Recent answers with score and acceptance status | —                         |
-| `stackoverflow.users`             | Stack Overflow users sorted by reputation      | `inname`                  |
-| `stackoverflow.tags`              | Tags sorted by popularity with question counts | —                         |
+| Table / Function                  | Description                                    | Key filters / args                                       |
+| --------------------------------- | ---------------------------------------------- | -------------------------------------------------------- |
+| `stackoverflow.questions`         | Browse questions by activity, votes, or tags   | `tagged`, `sort`, `fromdate`, `todate`, `min`, `max`     |
+| `stackoverflow.search_questions()`| Search questions by title keyword (function)   | `intitle` (**required**), `tagged`, `sort`               |
+| `stackoverflow.answers`           | Recent answers with score and acceptance status | `sort`, `fromdate`, `todate`, `min`, `max`                |
+| `stackoverflow.users`             | Stack Overflow users sorted by reputation      | `inname`                                                 |
+| `stackoverflow.tags`              | Tags sorted by popularity with question counts | —                                                        |
 
 ## Example queries
 
@@ -77,12 +78,13 @@ FROM stackoverflow.tags
 LIMIT 20;
 ```
 
-## Pagination
+## Pagination & Quota Safety
 
-All tables use Stack Exchange page-based pagination (default page size 30,
-max 100). Coral handles this automatically — just use `LIMIT` to control
-how many rows you want. Without an explicit `LIMIT`, results are capped at
-100 rows (`fetch_limit_default`) to avoid exhausting the API quota.
+All tables use Stack Exchange page-based pagination (default page size 30, max 100). Coral handles this automatically — just use `LIMIT` to control how many rows you want. Without an explicit `LIMIT`, results are capped at 100 rows (`fetch_limit_default`) to avoid exhausting the API quota.
+
+**Important Quota & Rate Limit Notes:**
+- **API Backoff:** The Stack Exchange API returns a `backoff` field in its response wrapper when rate limits are approached, requiring clients to pause before making further requests. Coral does not currently honor or wait on this `backoff` field dynamically.
+- **Throttling:** Rapid, sequential pagination requests can trigger IP-based throttling. To ensure quota-safe usage, always use narrow limits, specify date bounds (`fromdate`/`todate`), and specify score bounds (`min`/`max`) when exploring.
 
 ## Notes
 

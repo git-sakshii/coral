@@ -51,6 +51,10 @@ tables:
     filters:
       - name: tagged
       - name: sort
+      - name: fromdate
+      - name: todate
+      - name: min
+      - name: max
     request:
       method: GET
       path: /questions
@@ -67,6 +71,18 @@ tables:
         - name: tagged
           from: filter
           key: tagged
+        - name: fromdate
+          from: filter
+          key: fromdate
+        - name: todate
+          from: filter
+          key: todate
+        - name: min
+          from: filter
+          key: min
+        - name: max
+          from: filter
+          key: max
     response:
       rows_path:
         - items
@@ -274,6 +290,38 @@ tables:
         expr:
           kind: from_filter
           key: sort
+      - name: fromdate
+        type: Int64
+        nullable: true
+        virtual: true
+        description: Start date of the range (Unix epoch seconds).
+        expr:
+          kind: from_filter
+          key: fromdate
+      - name: todate
+        type: Int64
+        nullable: true
+        virtual: true
+        description: End date of the range (Unix epoch seconds).
+        expr:
+          kind: from_filter
+          key: todate
+      - name: min
+        type: Int64
+        nullable: true
+        virtual: true
+        description: Minimum score bounds.
+        expr:
+          kind: from_filter
+          key: min
+      - name: max
+        type: Int64
+        nullable: true
+        virtual: true
+        description: Maximum score bounds.
+        expr:
+          kind: from_filter
+          key: max
 
   - name: answers
     description: >
@@ -284,6 +332,12 @@ tables:
       Start with `SELECT answer_id, question_id, score,
       is_accepted FROM stackoverflow.answers LIMIT 10`.
     fetch_limit_default: 100
+    filters:
+      - name: sort
+      - name: fromdate
+      - name: todate
+      - name: min
+      - name: max
     request:
       method: GET
       path: /answers
@@ -295,8 +349,20 @@ tables:
           from: literal
           value: desc
         - name: sort
-          from: literal
-          value: activity
+          from: filter
+          key: sort
+        - name: fromdate
+          from: filter
+          key: fromdate
+        - name: todate
+          from: filter
+          key: todate
+        - name: min
+          from: filter
+          key: min
+        - name: max
+          from: filter
+          key: max
     response:
       rows_path:
         - items
@@ -421,6 +487,46 @@ tables:
             kind: path
             path:
               - last_edit_date
+      - name: sort
+        type: Utf8
+        nullable: true
+        virtual: true
+        description: Echoes the sort filter (activity, votes, creation).
+        expr:
+          kind: from_filter
+          key: sort
+      - name: fromdate
+        type: Int64
+        nullable: true
+        virtual: true
+        description: Start date of the range (Unix epoch seconds).
+        expr:
+          kind: from_filter
+          key: fromdate
+      - name: todate
+        type: Int64
+        nullable: true
+        virtual: true
+        description: End date of the range (Unix epoch seconds).
+        expr:
+          kind: from_filter
+          key: todate
+      - name: min
+        type: Int64
+        nullable: true
+        virtual: true
+        description: Minimum score bounds.
+        expr:
+          kind: from_filter
+          key: min
+      - name: max
+        type: Int64
+        nullable: true
+        virtual: true
+        description: Maximum score bounds.
+        expr:
+          kind: from_filter
+          key: max
 
   - name: tags
     description: >
