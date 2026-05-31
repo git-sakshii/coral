@@ -46,6 +46,12 @@ FROM stackoverflow.questions
 WHERE tagged = 'rust'
 LIMIT 10;
 
+-- High-scoring questions tagged with 'rust' (min/max apply to the sort field)
+SELECT question_id, title, score
+FROM stackoverflow.questions
+WHERE tagged = 'rust' AND sort = 'votes' AND min = 50
+LIMIT 10;
+
 -- Questions tagged with both 'python' AND 'django'
 SELECT question_id, title, score
 FROM stackoverflow.questions
@@ -84,7 +90,7 @@ All tables use Stack Exchange page-based pagination (default page size 30, max 1
 
 **Important Quota & Rate Limit Notes:**
 - **API Backoff:** The Stack Exchange API returns a `backoff` field in its response wrapper when rate limits are approached, requiring clients to pause before making further requests. Coral does not currently honor or wait on this `backoff` field dynamically.
-- **Throttling:** Rapid, sequential pagination requests can trigger IP-based throttling. To ensure quota-safe usage, always use narrow limits, specify date bounds (`fromdate`/`todate`), and specify score bounds (`min`/`max`) when exploring.
+- **Throttling:** Rapid, sequential pagination requests can trigger IP-based throttling. To ensure quota-safe usage, always use narrow limits, specify date bounds (`fromdate`/`todate`), and specify bounds (`min`/`max`) on the active sort field when exploring (e.g. set `sort = 'votes'` to filter by score).
 
 ## Notes
 

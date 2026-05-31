@@ -310,7 +310,7 @@ tables:
         type: Int64
         nullable: true
         virtual: true
-        description: Minimum score bounds.
+        description: Minimum bound on the active sort field (e.g. score when sort = 'votes').
         expr:
           kind: from_filter
           key: min
@@ -318,7 +318,7 @@ tables:
         type: Int64
         nullable: true
         virtual: true
-        description: Maximum score bounds.
+        description: Maximum bound on the active sort field (e.g. score when sort = 'votes').
         expr:
           kind: from_filter
           key: max
@@ -515,7 +515,7 @@ tables:
         type: Int64
         nullable: true
         virtual: true
-        description: Minimum score bounds.
+        description: Minimum bound on the active sort field (e.g. score when sort = 'votes').
         expr:
           kind: from_filter
           key: min
@@ -523,7 +523,7 @@ tables:
         type: Int64
         nullable: true
         virtual: true
-        description: Maximum score bounds.
+        description: Maximum bound on the active sort field (e.g. score when sort = 'votes').
         expr:
           kind: from_filter
           key: max
